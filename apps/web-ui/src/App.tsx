@@ -505,31 +505,12 @@ function TimelinePage(props: {
             </div>
 
             <div className="insight-grid browser-detail-layout">
-              <div className="panel panel-subtle">
-                <DonutChart
-                  title="域名占比"
-                  totalLabel={formatDuration(props.browserDetail.totalSeconds)}
+              <div className="panel panel-subtle browser-summary-panel">
+                <BrowserDomainList
                   slices={props.browserDetail.slices}
                   filter={props.domainFilter}
-                  filterKind="domain"
                   onSelect={props.setDomainFilter}
-                />
-              </div>
-
-              <div className="detail-timeline-card">
-                <TimelineChart
-                  rows={[
-                    {
-                      id: 'domain-detail',
-                      label: '域名',
-                      segments: props.browserDetail.segments,
-                      selectedKey: props.domainFilter?.key ?? null,
-                    },
-                  ]}
-                  viewStartSec={selectedBrowserSegment.startSec}
-                  viewEndSec={selectedBrowserSegment.endSec}
-                  baseDate={props.selectedDate}
-                  showTable
+                  totalLabel={formatDuration(props.browserDetail.totalSeconds)}
                 />
               </div>
             </div>
@@ -680,6 +661,53 @@ function RankingList(props: { title: string; slices: DonutSlice[] }) {
             <span>{slice.percentage.toFixed(1)}%</span>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function BrowserDomainList(props: {
+  slices: DonutSlice[]
+  filter: DashboardFilter
+  onSelect: (value: DashboardFilter) => void
+  totalLabel: string
+}) {
+  return (
+    <div className="browser-domain-list">
+      <div className="browser-domain-list-head">
+        <div>
+          <p className="section-kicker">Domains</p>
+          <h3>域名占比</h3>
+        </div>
+        <strong>{props.totalLabel}</strong>
+      </div>
+
+      <div className="browser-domain-items">
+        {props.slices.length === 0 ? (
+          <div className="empty-card">当前时间段没有域名数据</div>
+        ) : (
+          props.slices.map((slice) => {
+            const isActive = props.filter?.kind === 'domain' && props.filter.key === slice.key
+
+            return (
+              <button
+                key={slice.id}
+                type="button"
+                className={`browser-domain-item ${isActive ? 'is-active' : ''}`}
+                onClick={() => {
+                  props.onSelect(isActive ? null : { kind: 'domain', key: slice.key })
+                }}
+              >
+                <span className="browser-domain-name">
+                  <i style={{ backgroundColor: slice.color }} />
+                  {slice.label}
+                </span>
+                <span>{formatDuration(slice.value)}</span>
+                <span>{slice.percentage.toFixed(1)}%</span>
+              </button>
+            )
+          })
+        )}
       </div>
     </div>
   )
