@@ -1,6 +1,6 @@
 /* ActivityWatch-inspired timeline with stacked lanes, navigator, and detail table. */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject, PointerEvent as ReactPointerEvent, WheelEvent } from 'react'
 import {
   formatClockRange,
@@ -37,6 +37,14 @@ type OverviewSegment = {
   opacity: number
 }
 
+type InspectionItem = {
+  id: string
+  label: string
+  detail: string
+  color: string
+  typeLabel: string
+}
+
 type DragState = {
   mode: 'move' | 'resize-start' | 'resize-end'
   startClientX: number
@@ -61,7 +69,9 @@ export function TimelineChart(props: {
   onSelectSegment?: (segment: ChartSegment) => void
 }) {
   const overviewRef = useRef<HTMLDivElement | null>(null)
+  const axisTrackRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<DragState | null>(null)
+  const [hoveredSec, setHoveredSec] = useState<number | null>(null)
   const minZoomSec = Math.round((props.minViewHours ?? 1 / 12) * 3600)
   const maxZoomSec = Math.round((props.maxViewHours ?? 24) * 3600)
   const visibleDuration = props.viewEndSec - props.viewStartSec
@@ -76,6 +86,12 @@ export function TimelineChart(props: {
     () => buildVisibleItems(layout, props.viewStartSec, props.viewEndSec),
     [layout, props.viewEndSec, props.viewStartSec],
   )
+  const inspectionItems = useMemo(
+    () => (hoveredSec === null ? [] : buildInspectionItems(layout, hoveredSec)),
+    [hoveredSec, layout],
+  )
+  const inspectionPositionPct =
+    hoveredSec === null ? null : ((hoveredSec - props.viewStartSec) / visibleDuration) * 100
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -133,18 +149,50 @@ export function TimelineChart(props: {
   }
 
   return (
-    <section className="timeline-devtools">
+    <section
+      className="timeline-devtools"
+      onPointerLeave={() => {
+        setHoveredSec(null)
+      }}
+    >
       <div className="timeline-devtools-head">
-        <strong>
-          {formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}
-        </strong>
-        <span>滚轮滚动列表，Shift + 滚轮缩放，拖动底部窗口平移</span>
+        <div className="timeline-devtools-summary">
+          <strong>
+            {formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}
+          </strong>
+          <span>滚轮滚动列表，Shift + 滚轮缩放，悬停定位时间点，拖动底部窗口平移</span>
+        </div>
+
+        {hoveredSec !== null ? (
+          <div className="timeline-inspector-summary">
+            <span className="timeline-inspector-time">{formatClock(hoveredSec)}</span>
+            <div className="timeline-inspector-items">
+              {inspectionItems.length > 0 ? (
+                inspectionItems.map((item) => (
+                  <span key={item.id} className="timeline-inspector-item" title={item.detail}>
+                    <i style={{ backgroundColor: item.color }} />
+                    <strong>{item.label}</strong>
+                    <small>{item.typeLabel}</small>
+                  </span>
+                ))
+              ) : (
+                <span className="timeline-inspector-empty">该时刻没有记录</span>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="timeline-waterfall">
         <div className="timeline-axis">
           <div className="timeline-axis-label">名称</div>
-          <div className="timeline-axis-track">
+          <div
+            ref={axisTrackRef}
+            className="timeline-axis-track"
+            onPointerMove={(event) => {
+              updateHoveredTime(event.clientX, axisTrackRef, props.viewStartSec, visibleDuration, setHoveredSec)
+            }}
+          >
             {ticks.map((tick) => (
               <div
                 key={`${tick.seconds}-${tick.label}`}
@@ -154,11 +202,23 @@ export function TimelineChart(props: {
                 <span>{tick.label}</span>
               </div>
             ))}
+
+            {inspectionPositionPct !== null ? (
+              <div
+                className="timeline-inspector-axis-marker"
+                style={{ left: `${inspectionPositionPct}%` }}
+              >
+                <span>{formatClock(hoveredSec ?? props.viewStartSec)}</span>
+              </div>
+            ) : null}
           </div>
         </div>
 
         <div
           className="timeline-waterfall-body"
+          onPointerMove={(event) => {
+            updateHoveredTime(event.clientX, axisTrackRef, props.viewStartSec, visibleDuration, setHoveredSec)
+          }}
           onWheel={(event) =>
             handleTimelineWheel(event, {
               minZoomSec,
@@ -225,6 +285,13 @@ export function TimelineChart(props: {
                     })}
                   </div>
                 ))}
+
+                {inspectionPositionPct !== null ? (
+                  <span
+                    className="timeline-inspector-line"
+                    style={{ left: `${inspectionPositionPct}%` }}
+                  />
+                ) : null}
               </div>
             </div>
           ))}
@@ -478,6 +545,32 @@ function buildVisibleItems(rows: RowLayout[], viewStartSec: number, viewEndSec: 
     })
 }
 
+function buildInspectionItems(rows: RowLayout[], seconds: number): InspectionItem[] {
+  return rows
+    .filter((row) => row.includeInTable)
+    .map((row) => findSegmentAtTime(row, seconds))
+    .filter((segment): segment is ChartSegment => segment !== null)
+    .map((segment) => ({
+      id: `${segment.id}-inspection`,
+      label: segment.label,
+      detail: segment.detail,
+      color: segment.color,
+      typeLabel: segmentTypeLabel(segment),
+    }))
+}
+
+function findSegmentAtTime(row: RowLayout, seconds: number) {
+  for (const lane of row.lanes) {
+    for (const segment of lane) {
+      if (segment.startSec <= seconds && seconds < segment.endSec) {
+        return segment
+      }
+    }
+  }
+
+  return null
+}
+
 function clipSegment(segment: ChartSegment, viewStartSec: number, viewEndSec: number) {
   const startSec = Math.max(segment.startSec, viewStartSec)
   const endSec = Math.min(segment.endSec, viewEndSec)
@@ -509,6 +602,27 @@ function beginOverviewDrag(
     startSec: props.viewStartSec,
     endSec: props.viewEndSec,
   }
+}
+
+function updateHoveredTime(
+  clientX: number,
+  trackRef: MutableRefObject<HTMLDivElement | null>,
+  viewStartSec: number,
+  visibleDuration: number,
+  setHoveredSec: (seconds: number | null) => void,
+) {
+  const rect = trackRef.current?.getBoundingClientRect()
+  if (!rect || rect.width <= 0) {
+    return
+  }
+
+  if (clientX < rect.left || clientX > rect.right) {
+    setHoveredSec(null)
+    return
+  }
+
+  const ratio = clampNumber((clientX - rect.left) / rect.width, 0, 1)
+  setHoveredSec(viewStartSec + ratio * visibleDuration)
 }
 
 function handleTimelineWheel(
