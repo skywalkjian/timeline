@@ -1,18 +1,18 @@
-/* Interactive SVG donut chart used for app and domain time distributions. */
+/* Donut chart rendered with ECharts so tooltip, legend, and selection share one engine. */
 
-import type { MouseEvent } from 'react'
+import { useMemo } from 'react'
+import ReactECharts from 'echarts-for-react'
+import * as echarts from 'echarts'
 import {
   formatDuration,
   isFilterActive,
   type DashboardFilter,
   type DonutSlice,
-  type TooltipDatum,
 } from '../lib/chart-model'
 
-const SIZE = 220
-const CENTER = SIZE / 2
-const OUTER_RADIUS = 78
-const INNER_RADIUS = 48
+const LABEL_COLOR = '#0f1726'
+const MUTED_COLOR = '#667085'
+const MONO_FAMILY = '"IBM Plex Mono", "SFMono-Regular", Consolas, monospace'
 
 export function DonutChart(props: {
   title: string
@@ -21,10 +21,140 @@ export function DonutChart(props: {
   filter: DashboardFilter
   filterKind: 'app' | 'domain'
   onSelect: (filter: DashboardFilter) => void
-  onHover: (tooltip: TooltipDatum | null) => void
 }) {
-  const total = props.slices.reduce((sum, slice) => sum + slice.value, 0)
-  const arcSlices = buildArcSlices(props.slices, total)
+  const sliceByLabel = useMemo(
+    () => new Map(props.slices.map((slice) => [slice.label, slice])),
+    [props.slices],
+  )
+
+  const option = useMemo<echarts.EChartsOption>(() => {
+    return {
+      animation: false,
+      tooltip: {
+        trigger: 'item',
+        appendToBody: true,
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderColor: '#d7dee7',
+        borderWidth: 1,
+        textStyle: {
+          color: LABEL_COLOR,
+          fontFamily: MONO_FAMILY,
+        },
+        formatter: (params) => {
+          const slice = getSliceDatum(params)
+          if (!slice) {
+            return ''
+          }
+
+          return [
+            `<div style="min-width:180px">`,
+            `<div style="font-weight:600;margin-bottom:6px">${escapeHtml(slice.label)}</div>`,
+            `<div>${escapeHtml(formatDuration(slice.value))}</div>`,
+            `<div>${slice.percentage.toFixed(1)}%</div>`,
+            `</div>`,
+          ].join('')
+        },
+      },
+      legend: {
+        orient: 'vertical',
+        top: 'middle',
+        right: 4,
+        icon: 'circle',
+        selectedMode: false,
+        itemWidth: 10,
+        itemHeight: 10,
+        formatter: (label: string) => {
+          const slice = sliceByLabel.get(label)
+          if (!slice) {
+            return label
+          }
+
+          return `{name|${label}}\n{meta|${formatDuration(slice.value)}  ${slice.percentage.toFixed(
+            1,
+          )}%}`
+        },
+        textStyle: {
+          rich: {
+            name: {
+              color: LABEL_COLOR,
+              fontSize: 12,
+              fontWeight: 600,
+              width: 170,
+              overflow: 'truncate',
+            },
+            meta: {
+              color: MUTED_COLOR,
+              fontFamily: MONO_FAMILY,
+              fontSize: 11,
+              lineHeight: 16,
+            },
+          },
+        },
+      },
+      series: [
+        {
+          name: props.title,
+          type: 'pie',
+          radius: ['58%', '80%'],
+          center: ['32%', '50%'],
+          avoidLabelOverlap: true,
+          label: { show: false },
+          labelLine: { show: false },
+          itemStyle: {
+            borderColor: '#ffffff',
+            borderWidth: 2,
+          },
+          emphasis: {
+            scale: true,
+            scaleSize: 8,
+          },
+          data: props.slices.map((slice) => {
+            const isActive = isFilterActive(props.filter, props.filterKind, slice.key)
+            const shouldDim =
+              props.filter?.kind === props.filterKind &&
+              !isActive &&
+              props.filter.key !== slice.key
+
+            return {
+              value: slice.value,
+              name: slice.label,
+              raw: slice,
+              selected: isActive,
+              selectedOffset: 8,
+              itemStyle: {
+                color: slice.color,
+                opacity: shouldDim ? 0.24 : 0.96,
+              },
+            }
+          }),
+        },
+      ],
+      graphic: [
+        {
+          type: 'text',
+          left: '32%',
+          top: '43%',
+          style: {
+            text: props.totalLabel,
+            fill: LABEL_COLOR,
+            font: `600 18px ${MONO_FAMILY}`,
+            textAlign: 'center',
+          },
+        },
+        {
+          type: 'text',
+          left: '32%',
+          top: '53%',
+          style: {
+            text: 'total',
+            fill: MUTED_COLOR,
+            font: `12px ${MONO_FAMILY}`,
+            textAlign: 'center',
+          },
+        },
+      ],
+    }
+  }, [props.filter, props.filterKind, props.slices, props.title, props.totalLabel, sliceByLabel])
 
   if (props.slices.length === 0) {
     return <div className="empty-card">没有可展示的数据</div>
@@ -39,148 +169,45 @@ export function DonutChart(props: {
         </div>
       </div>
 
-      <div className="donut-layout">
-        <svg className="donut-svg" viewBox={`0 0 ${SIZE} ${SIZE}`}>
-          {arcSlices.map(({ slice, path }) => {
+      <ReactECharts
+        option={option}
+        notMerge
+        lazyUpdate
+        opts={{ renderer: 'svg' }}
+        onEvents={{
+          click: (params: unknown) => {
+            const slice = getSliceDatum(params)
+            if (!slice || slice.key === 'others') {
+              return
+            }
+
             const isActive = isFilterActive(props.filter, props.filterKind, slice.key)
-            const shouldDim =
-              props.filter?.kind === props.filterKind &&
-              !isActive &&
-              props.filter.key !== slice.key
-
-            return (
-              <path
-                key={slice.id}
-                className={`donut-slice ${shouldDim ? 'is-dimmed' : ''}`}
-                d={path}
-                fill={slice.color}
-                onMouseEnter={(event) => {
-                  props.onHover(buildSliceTooltip(event, slice))
-                }}
-                onMouseMove={(event) => {
-                  props.onHover(buildSliceTooltip(event, slice))
-                }}
-                onMouseLeave={() => {
-                  props.onHover(null)
-                }}
-                onClick={() => {
-                  if (slice.key === 'others') {
-                    return
-                  }
-
-                  props.onSelect(
-                    isActive ? null : { kind: props.filterKind, key: slice.key },
-                  )
-                }}
-              />
-            )
-          })}
-
-          <circle cx={CENTER} cy={CENTER} r={INNER_RADIUS - 1} fill="#ffffff" />
-          <text x={CENTER} y={CENTER - 4} textAnchor="middle" className="donut-center-value">
-            {props.totalLabel}
-          </text>
-          <text x={CENTER} y={CENTER + 18} textAnchor="middle" className="donut-center-caption">
-            total
-          </text>
-        </svg>
-
-        <div className="donut-legend">
-          {props.slices.map((slice) => {
-            const isActive = isFilterActive(props.filter, props.filterKind, slice.key)
-            const shouldDim =
-              props.filter?.kind === props.filterKind &&
-              !isActive &&
-              props.filter.key !== slice.key
-
-            return (
-              <button
-                key={slice.id}
-                type="button"
-                className={`legend-row ${shouldDim ? 'is-dimmed' : ''}`}
-                onClick={() => {
-                  if (slice.key === 'others') {
-                    return
-                  }
-
-                  props.onSelect(
-                    isActive ? null : { kind: props.filterKind, key: slice.key },
-                  )
-                }}
-                onMouseEnter={(event) => {
-                  props.onHover(buildSliceTooltip(event, slice))
-                }}
-                onMouseMove={(event) => {
-                  props.onHover(buildSliceTooltip(event, slice))
-                }}
-                onMouseLeave={() => {
-                  props.onHover(null)
-                }}
-              >
-                <span className="legend-dot" style={{ backgroundColor: slice.color }} />
-                <div className="legend-copy">
-                  <strong>{slice.label}</strong>
-                  <span>{slice.percentage.toFixed(1)}%</span>
-                </div>
-                <span className="legend-value">{formatDuration(slice.value)}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+            props.onSelect(isActive ? null : { kind: props.filterKind, key: slice.key })
+          },
+        }}
+        style={{ height: 260, width: '100%' }}
+      />
     </div>
   )
 }
 
-function buildArcSlices(slices: DonutSlice[], total: number) {
-  const arcs: Array<{ slice: DonutSlice; path: string }> = []
-  let currentAngle = -90
-
-  for (const slice of slices) {
-    const angle = total === 0 ? 0 : (slice.value / total) * 360
-    arcs.push({
-      slice,
-      path: describeArc(currentAngle, currentAngle + angle),
-    })
-    currentAngle += angle
+function getSliceDatum(params: unknown) {
+  if (!params || typeof params !== 'object' || !('data' in params)) {
+    return null
   }
 
-  return arcs
-}
-
-function buildSliceTooltip(
-  event: MouseEvent<SVGPathElement | HTMLButtonElement>,
-  slice: DonutSlice,
-): TooltipDatum {
-  return {
-    x: event.clientX,
-    y: event.clientY,
-    color: slice.color,
-    title: slice.label,
-    lines: [formatDuration(slice.value), `${slice.percentage.toFixed(1)}%`],
+  const data = (params as { data?: { raw?: unknown } }).data
+  if (!data?.raw || typeof data.raw !== 'object') {
+    return null
   }
+
+  return data.raw as DonutSlice
 }
 
-function describeArc(startAngle: number, endAngle: number) {
-  const startOuter = polarToCartesian(OUTER_RADIUS, endAngle)
-  const endOuter = polarToCartesian(OUTER_RADIUS, startAngle)
-  const startInner = polarToCartesian(INNER_RADIUS, startAngle)
-  const endInner = polarToCartesian(INNER_RADIUS, endAngle)
-  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0
-
-  return [
-    `M ${startOuter.x} ${startOuter.y}`,
-    `A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 ${largeArcFlag} 0 ${endOuter.x} ${endOuter.y}`,
-    `L ${startInner.x} ${startInner.y}`,
-    `A ${INNER_RADIUS} ${INNER_RADIUS} 0 ${largeArcFlag} 1 ${endInner.x} ${endInner.y}`,
-    'Z',
-  ].join(' ')
-}
-
-function polarToCartesian(radius: number, angle: number) {
-  const radians = ((angle - 90) * Math.PI) / 180
-  return {
-    x: CENTER + radius * Math.cos(radians),
-    y: CENTER + radius * Math.sin(radians),
-  }
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
 }

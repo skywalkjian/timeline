@@ -2,7 +2,6 @@
 
 import { startTransition, useEffect, useMemo, useState } from 'react'
 import './App.css'
-import { ChartTooltip } from './components/chart-tooltip'
 import { DonutChart } from './components/donut-chart'
 import { TimelineChart } from './components/timeline-chart'
 import { getTimeline, type TimelineDayResponse } from './api'
@@ -12,10 +11,20 @@ import {
   formatClockRange,
   formatDuration,
   type DashboardFilter,
-  type TooltipDatum,
 } from './lib/chart-model'
 
-const ZOOM_OPTIONS = [24, 12, 6, 3, 1] as const
+const ZOOM_OPTIONS = [
+  { hours: 24, label: '24h' },
+  { hours: 12, label: '12h' },
+  { hours: 8, label: '8h' },
+  { hours: 6, label: '6h' },
+  { hours: 4, label: '4h' },
+  { hours: 2, label: '2h' },
+  { hours: 1, label: '1h' },
+  { hours: 0.5, label: '30m' },
+  { hours: 0.25, label: '15m' },
+  { hours: 1 / 12, label: '5m' },
+] as const
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(() => todayString())
@@ -25,7 +34,6 @@ function App() {
   const [activeOnly, setActiveOnly] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
-  const [tooltip, setTooltip] = useState<TooltipDatum | null>(null)
   const [appFilter, setAppFilter] = useState<DashboardFilter>(null)
   const [domainFilter, setDomainFilter] = useState<DashboardFilter>(null)
   const [selectedBrowserSegmentId, setSelectedBrowserSegmentId] = useState<string | null>(null)
@@ -101,14 +109,13 @@ function App() {
   const viewEndSec = viewStartSec + zoomHours * 3600
 
   return (
-    <>
       <main className="app-shell">
         <section className="topbar-panel">
           <div className="title-block">
             <p className="eyebrow">timeline / analysis panel</p>
             <h1>注意力分析面板</h1>
             <p className="hero-text">
-              主时间线只展示应用与状态。点击浏览器应用段后，右侧展开该时间段对应的域名明细。
+              图表层已经切到成熟库。主时间线支持滚轮缩放和拖动窗口，点击浏览器应用段后，右侧展开该时间段对应的域名明细。
             </p>
           </div>
 
@@ -212,18 +219,39 @@ function App() {
 
               <div className="zoom-controls">
                 <div className="zoom-buttons">
-                  {ZOOM_OPTIONS.map((hours) => (
+                  {ZOOM_OPTIONS.map((option) => (
                     <button
-                      key={hours}
+                      key={option.label}
                       type="button"
-                      className={`zoom-button ${zoomHours === hours ? 'is-active' : ''}`}
+                      className={`zoom-button ${zoomHours === option.hours ? 'is-active' : ''}`}
                       onClick={() => {
-                        setZoomHours(hours)
+                        setZoomHours(option.hours)
                       }}
                     >
-                      {hours === 24 ? '24h' : `${hours}h`}
+                      {option.label}
                     </button>
                   ))}
+
+                  {selectedBrowserSegment ? (
+                    <button
+                      type="button"
+                      className="zoom-button focus-button"
+                      onClick={() => {
+                        const nextZoom = bestFitZoom(selectedBrowserSegment.durationSec / 3600)
+                        const segmentMidpoint =
+                          selectedBrowserSegment.startSec +
+                          selectedBrowserSegment.durationSec / 2
+                        const nextStart = clampViewStart(
+                          segmentMidpoint / 3600 - nextZoom / 2,
+                          nextZoom,
+                        )
+                        setZoomHours(nextZoom)
+                        setViewStartHour(nextStart)
+                      }}
+                    >
+                      定位到选中段
+                    </button>
+                  ) : null}
                 </div>
 
                 <div className="range-controls">
@@ -231,7 +259,10 @@ function App() {
                     type="button"
                     className="zoom-button"
                     onClick={() => {
-                      setViewStartHour((current) => Math.max(current - Math.max(zoomHours / 2, 1), 0))
+                      const step = getViewStep(zoomHours)
+                      setViewStartHour((current) =>
+                        clampViewStart(current - Math.max(zoomHours / 2, step), zoomHours),
+                      )
                     }}
                     disabled={viewStartHour <= 0}
                   >
@@ -242,7 +273,7 @@ function App() {
                     type="range"
                     min={0}
                     max={24 - zoomHours}
-                    step={0.5}
+                    step={getViewStep(zoomHours)}
                     value={viewStartHour}
                     onChange={(event) => {
                       setViewStartHour(Number(event.target.value))
@@ -252,8 +283,9 @@ function App() {
                     type="button"
                     className="zoom-button"
                     onClick={() => {
+                      const step = getViewStep(zoomHours)
                       setViewStartHour((current) =>
-                        Math.min(current + Math.max(zoomHours / 2, 1), 24 - zoomHours),
+                        clampViewStart(current + Math.max(zoomHours / 2, step), zoomHours),
                       )
                     }}
                     disabled={viewStartHour >= 24 - zoomHours}
@@ -271,7 +303,7 @@ function App() {
                     <p className="section-kicker">timeline</p>
                     <h2>应用主时间线</h2>
                   </div>
-                  <p className="timezone-label">点击浏览器应用段查看域名明细</p>
+                  <p className="timezone-label">滚轮缩放，拖动底部缩放条，点击浏览器段查看域名明细</p>
                 </div>
 
                 <TimelineChart
@@ -290,8 +322,14 @@ function App() {
                   ]}
                   viewStartSec={viewStartSec}
                   viewEndSec={viewEndSec}
+                  interactiveZoom
                   selectedSegmentId={selectedBrowserSegment?.id ?? null}
-                  onHover={setTooltip}
+                  onViewportChange={(nextStartSec, nextEndSec) => {
+                    const nextZoom = normalizeZoomHours((nextEndSec - nextStartSec) / 3600)
+                    const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
+                    setZoomHours(nextZoom)
+                    setViewStartHour(clampViewStart(nextStartHour, nextZoom))
+                  }}
                   onSelectSegment={(segment) => {
                     if (segment.tone !== 'focus') {
                       return
@@ -322,7 +360,6 @@ function App() {
                     onSelect={(nextFilter) => {
                       setAppFilter(nextFilter)
                     }}
-                    onHover={setTooltip}
                   />
                 </div>
 
@@ -359,7 +396,6 @@ function App() {
                           onSelect={(nextFilter) => {
                             setDomainFilter(nextFilter)
                           }}
-                          onHover={setTooltip}
                         />
 
                         <div className="detail-timeline-card">
@@ -374,7 +410,6 @@ function App() {
                             ]}
                             viewStartSec={selectedBrowserSegment.startSec}
                             viewEndSec={selectedBrowserSegment.endSec}
-                            onHover={setTooltip}
                           />
                         </div>
                       </div>
@@ -390,9 +425,6 @@ function App() {
           </>
         ) : null}
       </main>
-
-      <ChartTooltip tooltip={tooltip} />
-    </>
   )
 }
 
@@ -434,6 +466,37 @@ function formatHourLabel(hours: number) {
   const whole = Math.floor(hours)
   const minutes = Math.round((hours - whole) * 60)
   return `${`${whole}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`
+}
+
+function getViewStep(zoomHours: number) {
+  if (zoomHours <= 1 / 12) {
+    return 1 / 60
+  }
+  if (zoomHours <= 0.25) {
+    return 1 / 24
+  }
+  if (zoomHours <= 1) {
+    return 1 / 12
+  }
+  if (zoomHours <= 4) {
+    return 0.25
+  }
+  return 0.5
+}
+
+function bestFitZoom(targetHours: number) {
+  const match =
+    ZOOM_OPTIONS.find((option) => option.hours >= Math.max(targetHours * 1.6, 1 / 12)) ??
+    ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1]
+  return match.hours
+}
+
+function clampViewStart(startHour: number, zoomHours: number) {
+  return Math.max(0, Math.min(startHour, 24 - zoomHours))
+}
+
+function normalizeZoomHours(hours: number) {
+  return Math.round(hours * 60) / 60
 }
 
 export default App

@@ -94,8 +94,6 @@
 .toggle-button,
 .action-button,
 .clear-filter-button,
-.legend-row,
-.timeline-segment,
 .zoom-button {
   cursor: pointer;
 }
@@ -251,11 +249,11 @@
 }
 
 .timeline-panel {
-  min-height: 560px;
+  min-height: 540px;
 }
 
 .browser-detail-panel {
-  min-height: 420px;
+  min-height: 460px;
 }
 
 .panel-header {
@@ -268,93 +266,6 @@
 
 .panel-header h2 {
   margin: 3px 0 0;
-}
-
-.timeline-chart {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.timeline-scale,
-.timeline-row {
-  display: grid;
-  grid-template-columns: 78px 1fr;
-  gap: 10px;
-}
-
-.timeline-scale-track {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-
-.timeline-scale-track span,
-.timeline-row-meta span {
-  color: var(--text-dim);
-  font-family: var(--mono-family);
-  font-size: 0.7rem;
-}
-
-.timeline-row-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 10px;
-}
-
-.timeline-row-meta strong {
-  font-size: 0.88rem;
-}
-
-.timeline-lane {
-  position: relative;
-  min-height: 124px;
-  border: 1px solid var(--lane-border);
-  border-radius: 12px;
-  background:
-    linear-gradient(90deg, rgba(108, 125, 149, 0.11) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(12, 18, 29, 0.02), rgba(12, 18, 29, 0.02));
-  background-size: calc(100% / 24) 100%, 100% 100%;
-  overflow: hidden;
-}
-
-.timeline-segment {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  border: none;
-  border-radius: 8px;
-  padding: 6px 8px;
-  text-align: left;
-  color: #f8fafc;
-  overflow: hidden;
-  transition:
-    opacity 0.15s ease,
-    transform 0.12s ease,
-    box-shadow 0.15s ease;
-}
-
-.timeline-segment span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mono-family);
-  font-size: 0.7rem;
-}
-
-.timeline-segment:hover {
-  transform: translateY(-1px);
-}
-
-.timeline-segment.is-selected {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 4px rgba(15, 23, 38, 0.25);
-}
-
-.timeline-segment.is-dimmed,
-.legend-row.is-dimmed,
-.donut-slice.is-dimmed {
-  opacity: 0.24;
 }
 
 .empty-inline,
@@ -401,102 +312,25 @@
   border-radius: 12px;
 }
 
+.timeline-chart-host,
+.detail-timeline-card,
+.donut-card .echarts-for-react {
+  width: 100%;
+}
+
+.timeline-chart-host {
+  border: 1px solid var(--lane-border);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(12, 18, 29, 0.015), rgba(12, 18, 29, 0.03)),
+    #fbfdff;
+  overflow: hidden;
+}
+
 .donut-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.donut-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 12px;
-  align-items: center;
-}
-
-.donut-svg {
-  width: 220px;
-  height: 220px;
-}
-
-.donut-slice {
-  stroke: rgba(255, 255, 255, 0.95);
-  stroke-width: 2px;
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
-  transform-origin: center;
-}
-
-.donut-slice:hover {
-  opacity: 0.92;
-}
-
-.donut-center-value,
-.donut-center-caption,
-.legend-value {
-  fill: var(--text-main);
-  font-family: var(--mono-family);
-}
-
-.donut-center-value {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.donut-center-caption {
-  font-size: 10px;
-  fill: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.donut-legend {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
-}
-
-.legend-row {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid var(--lane-border);
-  border-radius: 10px;
-  background: rgba(248, 250, 252, 0.78);
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-
-.legend-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.legend-copy strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.82rem;
-}
-
-.legend-copy span {
-  color: var(--text-dim);
-  font-family: var(--mono-family);
-  font-size: 0.72rem;
-}
-
-.legend-value {
-  font-size: 0.76rem;
-  font-weight: 600;
 }
 
 .state-card {
@@ -546,23 +380,8 @@
 
 @media (max-width: 840px) {
   .toolbar-grid,
-  .donut-layout,
-  .timeline-scale,
-  .timeline-row,
   .range-controls {
     grid-template-columns: 1fr;
-  }
-
-  .timeline-scale-track {
-    display: none;
-  }
-
-  .timeline-lane {
-    min-height: 112px;
-  }
-
-  .donut-layout {
-    justify-items: center;
   }
 }
 
