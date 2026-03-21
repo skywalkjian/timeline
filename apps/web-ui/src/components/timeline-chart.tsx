@@ -346,10 +346,48 @@ export function TimelineChart(props: {
 }
 
 function buildRows(rows: TimelineRow[]): RowLayout[] {
-  return rows.map((row) => ({
-    ...row,
-    lanes: buildLanes(row.segments),
-  }))
+  return rows.flatMap((row) => {
+    const shouldSplitByKey =
+      row.segments.length > 0 &&
+      (row.segments[0].tone === 'focus' || row.segments[0].tone === 'browser')
+
+    if (!shouldSplitByKey) {
+      return [
+        {
+          id: row.id,
+          label: row.label,
+          selectedKey: row.selectedKey,
+          lanes: buildLanes(row.segments),
+        },
+      ]
+    }
+
+    const grouped = new Map<string, { label: string; segments: ChartSegment[]; total: number }>()
+
+    for (const segment of row.segments) {
+      const current = grouped.get(segment.key)
+      if (current) {
+        current.segments.push(segment)
+        current.total += segment.durationSec
+        continue
+      }
+
+      grouped.set(segment.key, {
+        label: segment.label,
+        segments: [segment],
+        total: segment.durationSec,
+      })
+    }
+
+    return Array.from(grouped.entries())
+      .sort((left, right) => right[1].total - left[1].total)
+      .map(([key, group]) => ({
+        id: `${row.id}-${key}`,
+        label: group.label,
+        selectedKey: row.selectedKey,
+        lanes: buildLanes(group.segments),
+      }))
+  })
 }
 
 function buildLanes(segments: ChartSegment[]) {

@@ -13,16 +13,6 @@ import {
   type DashboardFilter,
 } from './lib/chart-model'
 
-const ZOOM_OPTIONS = [
-  { hours: 8, label: '8h' },
-  { hours: 6, label: '6h' },
-  { hours: 4, label: '4h' },
-  { hours: 2, label: '2h' },
-  { hours: 1, label: '1h' },
-  { hours: 0.5, label: '30m' },
-  { hours: 0.25, label: '15m' },
-  { hours: 1 / 12, label: '5m' },
-] as const
 const MAX_ZOOM_HOURS = 8
 const MIN_ZOOM_HOURS = 1 / 12
 
@@ -174,26 +164,11 @@ function App() {
 
         {!loading && !error && dashboard ? (
           <>
-            <section className="summary-grid">
-              <SummaryCard
-                title="专注时长"
-                value={formatDuration(dashboard.summary.focusSeconds)}
-                caption={activeOnly ? 'active only' : 'all segments'}
-              />
+            <section className="summary-grid summary-grid-single">
               <SummaryCard
                 title="active 时长"
                 value={formatDuration(dashboard.summary.activeSeconds)}
                 caption="presence = active"
-              />
-              <SummaryCard
-                title="最长专注"
-                value={formatDuration(dashboard.summary.longestFocusSeconds)}
-                caption="visible longest block"
-              />
-              <SummaryCard
-                title="切换次数"
-                value={`${dashboard.summary.switchCount}`}
-                caption="visible focus segments"
               />
             </section>
 
@@ -205,58 +180,6 @@ function App() {
               <MetaPill label="presence" value={`${dashboard.meta.presenceCount}`} />
             </section>
 
-            <section className="zoom-panel panel">
-              <div className="panel-header">
-                <div>
-                  <p className="section-kicker">scale</p>
-                  <h2>快速尺度</h2>
-                </div>
-                <p className="timezone-label">
-                  当前窗口 {formatHourLabel(viewStartHour)} -{' '}
-                  {formatHourLabel(viewStartHour + zoomHours)} / 最长 8h
-                </p>
-              </div>
-
-              <div className="zoom-controls">
-                <div className="zoom-buttons">
-                  {ZOOM_OPTIONS.map((option) => (
-                    <button
-                      key={option.label}
-                      type="button"
-                      className={`zoom-button ${zoomHours === option.hours ? 'is-active' : ''}`}
-                      onClick={() => {
-                        setZoomHours(clampZoomHours(option.hours))
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-
-                  {selectedBrowserSegment ? (
-                    <button
-                      type="button"
-                      className="zoom-button focus-button"
-                      onClick={() => {
-                        const nextZoom = bestFitZoom(selectedBrowserSegment.durationSec / 3600)
-                        const segmentMidpoint =
-                          selectedBrowserSegment.startSec +
-                          selectedBrowserSegment.durationSec / 2
-                        const nextStart = clampViewStart(
-                          segmentMidpoint / 3600 - nextZoom / 2,
-                          nextZoom,
-                        )
-                        setZoomHours(nextZoom)
-                        setViewStartHour(nextStart)
-                      }}
-                    >
-                      定位到选中段
-                    </button>
-                  ) : null}
-                </div>
-                <p className="zoom-hint">拖动图表底部缩放条或滚轮缩放，顶部按钮只负责快速切换尺度。</p>
-              </div>
-            </section>
-
             <section className="dashboard-grid">
               <div className="panel timeline-panel">
                 <div className="panel-header">
@@ -264,7 +187,39 @@ function App() {
                     <p className="section-kicker">timeline</p>
                     <h2>应用主时间线</h2>
                   </div>
-                  <p className="timezone-label">滚轮缩放，拖动底部缩放条，点击浏览器段查看域名明细</p>
+                  <div className="timeline-panel-actions">
+                    <p className="timezone-label">
+                      当前窗口 {formatHourLabel(viewStartHour)} -{' '}
+                      {formatHourLabel(viewStartHour + zoomHours)} / 最长 8h
+                    </p>
+                    {selectedBrowserSegment ? (
+                      <button
+                        type="button"
+                        className="zoom-button"
+                        onClick={() => {
+                          const nextZoom = clampZoomHours(
+                            Math.max(
+                              normalizeZoomHours(
+                                (selectedBrowserSegment.durationSec / 3600) * 1.6,
+                              ),
+                              MIN_ZOOM_HOURS,
+                            ),
+                          )
+                          const segmentMidpoint =
+                            selectedBrowserSegment.startSec +
+                            selectedBrowserSegment.durationSec / 2
+                          const nextStart = clampViewStart(
+                            segmentMidpoint / 3600 - nextZoom / 2,
+                            nextZoom,
+                          )
+                          setZoomHours(nextZoom)
+                          setViewStartHour(nextStart)
+                        }}
+                      >
+                        定位到选中段
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
                 <TimelineChart
@@ -433,13 +388,6 @@ function formatHourLabel(hours: number) {
   const whole = Math.floor(hours)
   const minutes = Math.round((hours - whole) * 60)
   return `${`${whole}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`
-}
-
-function bestFitZoom(targetHours: number) {
-  const target = clampZoomHours(Math.max(targetHours * 1.6, MIN_ZOOM_HOURS))
-  const reversed = [...ZOOM_OPTIONS].reverse()
-  const match = reversed.find((option) => option.hours >= target)
-  return match?.hours ?? MAX_ZOOM_HOURS
 }
 
 function clampViewStart(startHour: number, zoomHours: number) {
