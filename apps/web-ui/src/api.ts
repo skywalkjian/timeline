@@ -64,7 +64,8 @@ type ApiEnvelope<T> = {
   } | null
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:46215'
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:46215'
 
 async function request<T>(path: string): Promise<T> {
   let response: Response

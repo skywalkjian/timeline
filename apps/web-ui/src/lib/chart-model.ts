@@ -51,6 +51,8 @@ export type DashboardModel = {
   browserSegments: ChartSegment[]
   presenceSegments: ChartSegment[]
   appSlices: DonutSlice[]
+  domainSlices: DonutSlice[]
+  presenceSlices: DonutSlice[]
   summary: {
     focusSeconds: number
     activeSeconds: number
@@ -95,6 +97,8 @@ export function buildDashboardModel(
     browserSegments,
     presenceSegments,
     appSlices: buildDonutSlices(focusSegments, 6),
+    domainSlices: buildDonutSlices(browserSegments, 6),
+    presenceSlices: buildDonutSlices(presenceSegments, 3),
     summary: {
       focusSeconds: sumDurations(focusSegments),
       activeSeconds: sumDurations(

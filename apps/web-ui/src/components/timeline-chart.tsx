@@ -49,6 +49,7 @@ export function TimelineChart(props: {
   baseDate?: string
   selectedSegmentId?: string | null
   interactiveZoom?: boolean
+  showTable?: boolean
   minViewHours?: number
   maxViewHours?: number
   onViewportChange?: (startSec: number, endSec: number) => void
@@ -303,37 +304,39 @@ export function TimelineChart(props: {
         </div>
       ) : null}
 
-      <div className="timeline-table">
-        <div className="timeline-table-header">
-          <span>名称</span>
-          <span>类型</span>
-          <span>说明</span>
-          <span>时间段</span>
-          <span>时长</span>
-        </div>
+      {props.showTable ? (
+        <div className="timeline-table">
+          <div className="timeline-table-header">
+            <span>名称</span>
+            <span>类型</span>
+            <span>说明</span>
+            <span>时间段</span>
+            <span>时长</span>
+          </div>
 
-        <div className="timeline-table-body">
-          {visibleItems.map((item) => (
-            <button
-              key={`${item.id}-row`}
-              type="button"
-              className={`timeline-table-row ${item.id === props.selectedSegmentId ? 'is-selected' : ''}`}
-              onClick={() => {
-                props.onSelectSegment?.(item)
-              }}
-            >
-              <span className="timeline-table-name">
-                <i style={{ backgroundColor: item.color }} />
-                {item.label}
-              </span>
-              <span>{segmentTypeLabel(item)}</span>
-              <span className="timeline-table-detail">{item.detail}</span>
-              <span>{formatClockRange(item.startSec, item.endSec)}</span>
-              <span>{formatDuration(item.durationSec)}</span>
-            </button>
-          ))}
+          <div className="timeline-table-body">
+            {visibleItems.map((item) => (
+              <button
+                key={`${item.id}-row`}
+                type="button"
+                className={`timeline-table-row ${item.id === props.selectedSegmentId ? 'is-selected' : ''}`}
+                onClick={() => {
+                  props.onSelectSegment?.(item)
+                }}
+              >
+                <span className="timeline-table-name">
+                  <i style={{ backgroundColor: item.color }} />
+                  {item.label}
+                </span>
+                <span>{segmentTypeLabel(item)}</span>
+                <span className="timeline-table-detail">{item.detail}</span>
+                <span>{formatClockRange(item.startSec, item.endSec)}</span>
+                <span>{formatDuration(item.durationSec)}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   )
 }
