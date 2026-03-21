@@ -1,3 +1,5 @@
+/* Browser entry point for the local timeline dashboard. */
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'

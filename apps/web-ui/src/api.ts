@@ -1,0 +1,94 @@
+/* Centralized browser-side API client for the local desktop agent. */
+
+export type PresenceState = 'active' | 'idle' | 'locked'
+
+export type FocusSegment = {
+  id: number
+  started_at: string
+  ended_at: string | null
+  app: {
+    process_name: string
+    display_name: string
+    exe_path: string | null
+    window_title: string | null
+    is_browser: boolean
+  }
+}
+
+export type BrowserSegment = {
+  id: number
+  domain: string
+  page_title: string | null
+  browser_window_id: number
+  tab_id: number
+  started_at: string
+  ended_at: string | null
+}
+
+export type PresenceSegment = {
+  id: number
+  state: PresenceState
+  started_at: string
+  ended_at: string | null
+}
+
+export type TimelineDayResponse = {
+  date: string
+  timezone: string
+  focus_segments: FocusSegment[]
+  browser_segments: BrowserSegment[]
+  presence_segments: PresenceSegment[]
+}
+
+export type DurationStat = {
+  key: string
+  label: string
+  seconds: number
+  percentage: number
+}
+
+export type FocusStats = {
+  total_focus_seconds: number
+  total_active_seconds: number
+  switch_count: number
+  longest_focus_block_seconds: number
+  average_focus_block_seconds: number
+}
+
+type ApiEnvelope<T> = {
+  ok: boolean
+  data: T | null
+  error: {
+    code: string
+    message: string
+  } | null
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:46215'
+
+async function request<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`)
+  const payload = (await response.json()) as ApiEnvelope<T>
+
+  if (!response.ok || !payload.ok || payload.data === null) {
+    throw new Error(payload.error?.message ?? '本地服务响应异常')
+  }
+
+  return payload.data
+}
+
+export function getTimeline(date: string) {
+  return request<TimelineDayResponse>(`/api/timeline/day?date=${date}`)
+}
+
+export function getAppStats(date: string) {
+  return request<DurationStat[]>(`/api/stats/apps?date=${date}`)
+}
+
+export function getDomainStats(date: string) {
+  return request<DurationStat[]>(`/api/stats/domains?date=${date}`)
+}
+
+export function getFocusStats(date: string) {
+  return request<FocusStats>(`/api/stats/focus?date=${date}`)
+}

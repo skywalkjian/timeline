@@ -1,0 +1,13 @@
+# timeline desktop-agent example config
+
+database_path = "data/timeline.sqlite"
+lockfile_path = "data/desktop-agent.lock"
+listen_addr = "127.0.0.1:46215"
+idle_threshold_secs = 300
+poll_interval_millis = 1000
+debug = true
+record_window_titles = true
+record_page_titles = true
+
+ignored_apps = []
+ignored_domains = []

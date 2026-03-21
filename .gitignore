@@ -1,4 +1,17 @@
-# agent guide 
+# Build outputs
+/target
+/apps/web-ui/dist
+/apps/web-ui/node_modules
+
+# Local runtime data
+/data
+/logs
+
+# Local editor or OS noise
+.DS_Store
+Thumbs.db
+
+# Repository guides that should stay local
 todo.md
 style.md
 proposal.md
