@@ -453,6 +453,7 @@ function TimelinePage(props: {
               id: 'presence',
               label: '状态',
               segments: props.dashboard.presenceSegments,
+              includeInTable: false,
             },
           ]}
           viewStartSec={props.viewStartSec}

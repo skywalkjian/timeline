@@ -70,8 +70,11 @@ export function TimelineChart(props: {
 }) {
   const overviewRef = useRef<HTMLDivElement | null>(null)
   const axisTrackRef = useRef<HTMLDivElement | null>(null)
+  const laneTrackRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<DragState | null>(null)
   const [hoveredSec, setHoveredSec] = useState<number | null>(null)
+  const [hoveredAxisLeftPx, setHoveredAxisLeftPx] = useState<number | null>(null)
+  const [hoveredLaneLeftPx, setHoveredLaneLeftPx] = useState<number | null>(null)
   const minZoomSec = Math.round((props.minViewHours ?? 1 / 12) * 3600)
   const maxZoomSec = Math.round((props.maxViewHours ?? 24) * 3600)
   const visibleDuration = props.viewEndSec - props.viewStartSec
@@ -90,8 +93,6 @@ export function TimelineChart(props: {
     () => (hoveredSec === null ? [] : buildInspectionItems(layout, hoveredSec)),
     [hoveredSec, layout],
   )
-  const inspectionPositionPct =
-    hoveredSec === null ? null : ((hoveredSec - props.viewStartSec) / visibleDuration) * 100
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -153,6 +154,8 @@ export function TimelineChart(props: {
       className="timeline-devtools"
       onPointerLeave={() => {
         setHoveredSec(null)
+        setHoveredAxisLeftPx(null)
+        setHoveredLaneLeftPx(null)
       }}
     >
       <div className="timeline-devtools-head">
@@ -190,7 +193,16 @@ export function TimelineChart(props: {
             ref={axisTrackRef}
             className="timeline-axis-track"
             onPointerMove={(event) => {
-              updateHoveredTime(event.clientX, axisTrackRef, props.viewStartSec, visibleDuration, setHoveredSec)
+              updateHoveredTime(
+                event.clientX,
+                axisTrackRef,
+                laneTrackRef,
+                props.viewStartSec,
+                visibleDuration,
+                setHoveredSec,
+                setHoveredAxisLeftPx,
+                setHoveredLaneLeftPx,
+              )
             }}
           >
             {ticks.map((tick) => (
@@ -203,10 +215,10 @@ export function TimelineChart(props: {
               </div>
             ))}
 
-            {inspectionPositionPct !== null ? (
+            {hoveredAxisLeftPx !== null ? (
               <div
                 className="timeline-inspector-axis-marker"
-                style={{ left: `${inspectionPositionPct}%` }}
+                style={{ left: `${hoveredAxisLeftPx}px` }}
               >
                 <span>{formatClock(hoveredSec ?? props.viewStartSec)}</span>
               </div>
@@ -217,7 +229,16 @@ export function TimelineChart(props: {
         <div
           className="timeline-waterfall-body"
           onPointerMove={(event) => {
-            updateHoveredTime(event.clientX, axisTrackRef, props.viewStartSec, visibleDuration, setHoveredSec)
+            updateHoveredTime(
+              event.clientX,
+              axisTrackRef,
+              laneTrackRef,
+              props.viewStartSec,
+              visibleDuration,
+              setHoveredSec,
+              setHoveredAxisLeftPx,
+              setHoveredLaneLeftPx,
+            )
           }}
           onWheel={(event) =>
             handleTimelineWheel(event, {
@@ -229,14 +250,17 @@ export function TimelineChart(props: {
             })
           }
         >
-          {layout.map((row) => (
+          {layout.map((row, rowIndex) => (
             <div key={row.id} className="timeline-row-block">
               <div className="timeline-row-head">
                 <strong>{row.label}</strong>
                 {row.lanes.length > 1 ? <span>{row.lanes.length} 层</span> : null}
               </div>
 
-              <div className="timeline-row-lanes">
+              <div
+                ref={rowIndex === 0 ? laneTrackRef : undefined}
+                className="timeline-row-lanes"
+              >
                 {row.lanes.map((lane, laneIndex) => (
                   <div key={`${row.id}-lane-${laneIndex}`} className="timeline-lane">
                     {ticks.map((tick) => (
@@ -286,10 +310,10 @@ export function TimelineChart(props: {
                   </div>
                 ))}
 
-                {inspectionPositionPct !== null ? (
+                {hoveredLaneLeftPx !== null ? (
                   <span
                     className="timeline-inspector-line"
-                    style={{ left: `${inspectionPositionPct}%` }}
+                    style={{ left: `${hoveredLaneLeftPx}px` }}
                   />
                 ) : null}
               </div>
@@ -607,9 +631,12 @@ function beginOverviewDrag(
 function updateHoveredTime(
   clientX: number,
   trackRef: MutableRefObject<HTMLDivElement | null>,
+  laneTrackRef: MutableRefObject<HTMLDivElement | null>,
   viewStartSec: number,
   visibleDuration: number,
   setHoveredSec: (seconds: number | null) => void,
+  setHoveredAxisLeftPx: (value: number | null) => void,
+  setHoveredLaneLeftPx: (value: number | null) => void,
 ) {
   const rect = trackRef.current?.getBoundingClientRect()
   if (!rect || rect.width <= 0) {
@@ -618,11 +645,22 @@ function updateHoveredTime(
 
   if (clientX < rect.left || clientX > rect.right) {
     setHoveredSec(null)
+    setHoveredAxisLeftPx(null)
+    setHoveredLaneLeftPx(null)
     return
   }
 
   const ratio = clampNumber((clientX - rect.left) / rect.width, 0, 1)
   setHoveredSec(viewStartSec + ratio * visibleDuration)
+  setHoveredAxisLeftPx(clampNumber(clientX - rect.left, 0, rect.width))
+
+  const laneRect = laneTrackRef.current?.getBoundingClientRect()
+  if (!laneRect || laneRect.width <= 0) {
+    setHoveredLaneLeftPx(null)
+    return
+  }
+
+  setHoveredLaneLeftPx(clampNumber(clientX - laneRect.left, 0, laneRect.width))
 }
 
 function handleTimelineWheel(
