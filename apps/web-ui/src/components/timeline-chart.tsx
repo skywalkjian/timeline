@@ -1,38 +1,40 @@
-/* Interactive 24-hour timeline chart with focus, domain, and presence lanes. */
+/* Interactive zoomable timeline chart with selectable focus and detail rows. */
 
 import type { MouseEvent } from 'react'
 import {
   formatClockRange,
   formatDuration,
-  isFilterActive,
   type ChartSegment,
-  type DashboardFilter,
   type TooltipDatum,
 } from '../lib/chart-model'
-
-const DAY_SECONDS = 24 * 60 * 60
 
 type TimelineRow = {
   id: string
   label: string
-  filterKind?: 'app' | 'domain'
   segments: ChartSegment[]
+  selectedKey?: string | null
 }
 
 export function TimelineChart(props: {
   rows: TimelineRow[]
-  filter: DashboardFilter
+  viewStartSec: number
+  viewEndSec: number
+  selectedSegmentId?: string | null
   onHover: (tooltip: TooltipDatum | null) => void
+  onSelectSegment?: (segment: ChartSegment) => void
 }) {
+  const visibleDuration = Math.max(props.viewEndSec - props.viewStartSec, 1)
+  const tickHours = buildTicks(props.viewStartSec, props.viewEndSec)
+  const visibleHours = Math.max(visibleDuration / 3600, 1)
+
   return (
     <div className="timeline-chart">
       <div className="timeline-scale">
         <span className="timeline-scale-label" />
         <div className="timeline-scale-track">
-          {Array.from({ length: 13 }).map((_, index) => {
-            const hour = index * 2
-            return <span key={hour}>{`${`${hour}`.padStart(2, '0')}:00`}</span>
-          })}
+          {tickHours.map((hour) => (
+            <span key={hour.position}>{hour.label}</span>
+          ))}
         </div>
       </div>
 
@@ -43,36 +45,57 @@ export function TimelineChart(props: {
             <span>{row.segments.length}</span>
           </div>
 
-          <div className="timeline-lane">
+          <div
+            className="timeline-lane"
+            style={{
+              backgroundSize: `calc(100% / ${visibleHours}) 100%, 100% 100%`,
+            }}
+          >
             {row.segments.length === 0 ? <p className="empty-inline">没有数据</p> : null}
 
             {row.segments.map((segment) => {
+              const visibleSegment = clipToViewport(
+                segment,
+                props.viewStartSec,
+                props.viewEndSec,
+              )
+              if (!visibleSegment) {
+                return null
+              }
+
               const shouldDim =
-                row.filterKind !== undefined &&
-                props.filter?.kind === row.filterKind &&
-                !isFilterActive(props.filter, row.filterKind, segment.key)
+                row.selectedKey !== null &&
+                row.selectedKey !== undefined &&
+                row.selectedKey !== segment.key
+              const isSelected = props.selectedSegmentId === segment.id
 
               return (
                 <button
                   key={segment.id}
                   type="button"
-                  className={`timeline-segment ${shouldDim ? 'is-dimmed' : ''}`}
+                  className={`timeline-segment ${shouldDim ? 'is-dimmed' : ''} ${
+                    isSelected ? 'is-selected' : ''
+                  }`}
                   style={{
-                    left: `${(segment.startSec / DAY_SECONDS) * 100}%`,
+                    left: `${((visibleSegment.startSec - props.viewStartSec) / visibleDuration) * 100}%`,
                     width: `${Math.max(
-                      ((segment.endSec - segment.startSec) / DAY_SECONDS) * 100,
-                      0.36,
+                      ((visibleSegment.endSec - visibleSegment.startSec) / visibleDuration) *
+                        100,
+                      0.5,
                     )}%`,
                     backgroundColor: segment.color,
                   }}
                   onMouseEnter={(event) => {
-                    props.onHover(buildTooltip(event, segment))
+                    props.onHover(buildTooltip(event, visibleSegment))
                   }}
                   onMouseMove={(event) => {
-                    props.onHover(buildTooltip(event, segment))
+                    props.onHover(buildTooltip(event, visibleSegment))
                   }}
                   onMouseLeave={() => {
                     props.onHover(null)
+                  }}
+                  onClick={() => {
+                    props.onSelectSegment?.(segment)
                   }}
                   title={segment.label}
                 >
@@ -85,6 +108,37 @@ export function TimelineChart(props: {
       ))}
     </div>
   )
+}
+
+function clipToViewport(segment: ChartSegment, viewStartSec: number, viewEndSec: number) {
+  const startSec = Math.max(segment.startSec, viewStartSec)
+  const endSec = Math.min(segment.endSec, viewEndSec)
+
+  if (endSec <= startSec) {
+    return null
+  }
+
+  return {
+    ...segment,
+    startSec,
+    endSec,
+    durationSec: endSec - startSec,
+  }
+}
+
+function buildTicks(viewStartSec: number, viewEndSec: number) {
+  const tickCount = 6
+  const total = viewEndSec - viewStartSec
+
+  return Array.from({ length: tickCount + 1 }).map((_, index) => {
+    const seconds = viewStartSec + (total / tickCount) * index
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    return {
+      position: seconds,
+      label: `${`${hours}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`,
+    }
+  })
 }
 
 function buildTooltip(

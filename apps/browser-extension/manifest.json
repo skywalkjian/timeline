@@ -5,6 +5,7 @@
   "description": "Send active tab domain events to the local timeline desktop agent.",
   "permissions": [
     "tabs",
+    "windows",
     "alarms",
     "storage"
   ],

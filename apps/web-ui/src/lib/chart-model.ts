@@ -11,14 +11,6 @@ const DAY_SECONDS = 24 * 60 * 60
 const APP_PALETTE = ['#4f7cff', '#0ea5a4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
 const DOMAIN_PALETTE = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2']
 
-export type ChartTone = 'focus' | 'browser' | 'presence'
-export type FilterKind = 'app' | 'domain'
-
-export type DashboardFilter = {
-  kind: FilterKind
-  key: string
-} | null
-
 export type TooltipDatum = {
   x: number
   y: number
@@ -27,16 +19,22 @@ export type TooltipDatum = {
   lines: string[]
 }
 
+export type DashboardFilter = {
+  kind: 'app' | 'domain'
+  key: string
+} | null
+
 export type ChartSegment = {
   id: string
   key: string
   label: string
   detail: string
-  tone: ChartTone
+  tone: 'focus' | 'browser' | 'presence'
   startSec: number
   endSec: number
   durationSec: number
   color: string
+  isBrowser?: boolean
 }
 
 export type DonutSlice = {
@@ -53,7 +51,6 @@ export type DashboardModel = {
   browserSegments: ChartSegment[]
   presenceSegments: ChartSegment[]
   appSlices: DonutSlice[]
-  domainSlices: DonutSlice[]
   summary: {
     focusSeconds: number
     activeSeconds: number
@@ -65,6 +62,12 @@ export type DashboardModel = {
     browserCount: number
     presenceCount: number
   }
+}
+
+export type BrowserDetailModel = {
+  segments: ChartSegment[]
+  slices: DonutSlice[]
+  totalSeconds: number
 }
 
 type Interval = {
@@ -92,7 +95,6 @@ export function buildDashboardModel(
     browserSegments,
     presenceSegments,
     appSlices: buildDonutSlices(focusSegments, 6),
-    domainSlices: buildDonutSlices(browserSegments, 6),
     summary: {
       focusSeconds: sumDurations(focusSegments),
       activeSeconds: sumDurations(
@@ -109,6 +111,49 @@ export function buildDashboardModel(
       browserCount: browserSegments.length,
       presenceCount: presenceSegments.length,
     },
+  }
+}
+
+export function buildBrowserDetailModel(
+  selectedFocusSegment: ChartSegment | null,
+  browserSegments: ChartSegment[],
+  selectedDomainKey: string | null,
+): BrowserDetailModel {
+  if (!selectedFocusSegment || !selectedFocusSegment.isBrowser) {
+    return {
+      segments: [],
+      slices: [],
+      totalSeconds: 0,
+    }
+  }
+
+  const overlappingSegments = browserSegments
+    .map((segment) => {
+      const startSec = Math.max(segment.startSec, selectedFocusSegment.startSec)
+      const endSec = Math.min(segment.endSec, selectedFocusSegment.endSec)
+
+      if (endSec <= startSec) {
+        return null
+      }
+
+      return {
+        ...segment,
+        id: `${segment.id}-detail-${startSec}`,
+        startSec,
+        endSec,
+        durationSec: endSec - startSec,
+      }
+    })
+    .filter((segment): segment is ChartSegment => segment !== null)
+
+  const filteredSegments = selectedDomainKey
+    ? overlappingSegments.filter((segment) => segment.key === selectedDomainKey)
+    : overlappingSegments
+
+  return {
+    segments: filteredSegments,
+    slices: buildDonutSlices(overlappingSegments, 6),
+    totalSeconds: sumDurations(filteredSegments),
   }
 }
 
@@ -137,7 +182,7 @@ export function formatClockRange(startSec: number, endSec: number) {
 
 export function isFilterActive(
   filter: DashboardFilter,
-  kind: FilterKind,
+  kind: 'app' | 'domain',
   key: string,
 ) {
   return filter?.kind === kind && filter.key === key
@@ -147,24 +192,20 @@ function toFocusChartSegments(segments: FocusSegment[], activeIntervals: Interva
   const results: ChartSegment[] = []
 
   for (const segment of segments) {
-    const ranges = clipSegment(
-      toRange(segment.started_at, segment.ended_at),
-      activeIntervals,
-    )
+    const ranges = clipSegment(toRange(segment.started_at, segment.ended_at), activeIntervals)
 
     ranges.forEach((range, index) => {
-      const label = segment.app.display_name
-      const detail = segment.app.window_title ?? segment.app.process_name
       results.push({
         id: `focus-${segment.id}-${index}`,
         key: segment.app.process_name,
-        label,
-        detail,
+        label: segment.app.display_name,
+        detail: segment.app.window_title ?? segment.app.process_name,
         tone: 'focus',
         startSec: range.startSec,
         endSec: range.endSec,
         durationSec: range.endSec - range.startSec,
         color: colorForKey(segment.app.process_name, APP_PALETTE),
+        isBrowser: segment.app.is_browser,
       })
     })
   }
@@ -208,11 +249,10 @@ function toPresenceChartSegments(segments: PresenceSegment[]) {
       continue
     }
 
-    const stateLabel = presenceLabel(segment.state)
     results.push({
       id: `presence-${segment.id}`,
       key: segment.state,
-      label: stateLabel,
+      label: presenceLabel(segment.state),
       detail: `状态段 ${segment.id}`,
       tone: 'presence',
       startSec: range.startSec,
@@ -312,10 +352,7 @@ function toRange(startedAt: string, endedAt: string | null): Interval | null {
     return null
   }
 
-  return {
-    startSec,
-    endSec,
-  }
+  return { startSec, endSec }
 }
 
 function toSecondsSinceMidnight(value: string) {

@@ -1,4 +1,4 @@
-/* Analysis dashboard styles focused on charts and dense information display. */
+/* Analysis dashboard styles focused on charts, zoom, and browser detail drill-down. */
 
 .app-shell {
   width: min(1440px, calc(100% - 24px));
@@ -14,7 +14,8 @@
 .status-card,
 .state-card,
 .meta-pill,
-.chart-tooltip {
+.chart-tooltip,
+.detail-timeline-card {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   box-shadow: 0 12px 28px rgba(15, 23, 38, 0.06);
@@ -94,13 +95,15 @@
 .action-button,
 .clear-filter-button,
 .legend-row,
-.timeline-segment {
+.timeline-segment,
+.zoom-button {
   cursor: pointer;
 }
 
 .toggle-button,
 .action-button,
-.clear-filter-button {
+.clear-filter-button,
+.zoom-button {
   border: 1px solid var(--input-border);
   border-radius: 10px;
   background: #ffffff;
@@ -110,20 +113,28 @@
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    opacity 0.15s ease;
 }
 
-.toggle-button {
+.toggle-button,
+.zoom-button {
   padding: 10px 12px;
-  text-align: left;
 }
 
 .toggle-button.is-active,
 .action-button:hover,
-.clear-filter-button:hover {
+.clear-filter-button:hover,
+.zoom-button.is-active,
+.zoom-button:hover:not(:disabled) {
   background: #0f1726;
   border-color: #0f1726;
   color: #f8fafc;
+}
+
+.zoom-button:disabled {
+  opacity: 0.42;
+  cursor: default;
 }
 
 .action-button {
@@ -192,13 +203,39 @@
   font-size: 0.88rem;
 }
 
-.clear-filter-button {
-  padding: 8px 10px;
+.zoom-panel {
+  margin-top: 12px;
+}
+
+.zoom-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.zoom-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.range-controls {
+  min-width: min(520px, 100%);
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.range-slider {
+  width: 100%;
 }
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(360px, 0.95fr);
   gap: 12px;
   margin-top: 12px;
 }
@@ -215,6 +252,10 @@
 
 .timeline-panel {
   min-height: 560px;
+}
+
+.browser-detail-panel {
+  min-height: 420px;
 }
 
 .panel-header {
@@ -244,7 +285,7 @@
 
 .timeline-scale-track {
   display: grid;
-  grid-template-columns: repeat(13, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .timeline-scale-track span,
@@ -289,7 +330,8 @@
   overflow: hidden;
   transition:
     opacity 0.15s ease,
-    transform 0.12s ease;
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
 }
 
 .timeline-segment span {
@@ -303,6 +345,10 @@
 
 .timeline-segment:hover {
   transform: translateY(-1px);
+}
+
+.timeline-segment.is-selected {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 4px rgba(15, 23, 38, 0.25);
 }
 
 .timeline-segment.is-dimmed,
@@ -320,6 +366,39 @@
 
 .empty-inline {
   padding: 12px;
+}
+
+.browser-empty {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+}
+
+.browser-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.browser-context strong {
+  font-size: 0.92rem;
+}
+
+.browser-context span {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.browser-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.detail-timeline-card {
+  padding: 12px;
+  border-radius: 12px;
 }
 
 .donut-card {
@@ -469,7 +548,8 @@
   .toolbar-grid,
   .donut-layout,
   .timeline-scale,
-  .timeline-row {
+  .timeline-row,
+  .range-controls {
     grid-template-columns: 1fr;
   }
 

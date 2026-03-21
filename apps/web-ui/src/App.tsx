@@ -1,17 +1,21 @@
-/* Main analysis dashboard for focus timeline and distribution charts. */
+/* Main analysis dashboard for focus timeline and browser detail charts. */
 
-import { startTransition, useEffect, useState } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { ChartTooltip } from './components/chart-tooltip'
 import { DonutChart } from './components/donut-chart'
 import { TimelineChart } from './components/timeline-chart'
 import { getTimeline, type TimelineDayResponse } from './api'
 import {
+  buildBrowserDetailModel,
   buildDashboardModel,
+  formatClockRange,
   formatDuration,
   type DashboardFilter,
   type TooltipDatum,
 } from './lib/chart-model'
+
+const ZOOM_OPTIONS = [24, 12, 6, 3, 1] as const
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(() => todayString())
@@ -22,7 +26,11 @@ function App() {
   const [refreshToken, setRefreshToken] = useState(0)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<TooltipDatum | null>(null)
-  const [filter, setFilter] = useState<DashboardFilter>(null)
+  const [appFilter, setAppFilter] = useState<DashboardFilter>(null)
+  const [domainFilter, setDomainFilter] = useState<DashboardFilter>(null)
+  const [selectedBrowserSegmentId, setSelectedBrowserSegmentId] = useState<string | null>(null)
+  const [zoomHours, setZoomHours] = useState<number>(24)
+  const [viewStartHour, setViewStartHour] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -61,7 +69,36 @@ function App() {
     }
   }, [selectedDate, refreshToken])
 
+  useEffect(() => {
+    setViewStartHour((current) => Math.min(current, 24 - zoomHours))
+  }, [zoomHours])
+
   const dashboard = timeline ? buildDashboardModel(timeline, activeOnly) : null
+
+  const selectedBrowserSegment = useMemo(() => {
+    if (!dashboard || !selectedBrowserSegmentId) {
+      return null
+    }
+
+    return (
+      dashboard.focusSegments.find((segment) => segment.id === selectedBrowserSegmentId) ?? null
+    )
+  }, [dashboard, selectedBrowserSegmentId])
+
+  const browserDetail = useMemo(() => {
+    if (!dashboard) {
+      return buildBrowserDetailModel(null, [], null)
+    }
+
+    return buildBrowserDetailModel(
+      selectedBrowserSegment,
+      dashboard.browserSegments,
+      domainFilter?.key ?? null,
+    )
+  }, [dashboard, selectedBrowserSegment, domainFilter])
+
+  const viewStartSec = viewStartHour * 3600
+  const viewEndSec = viewStartSec + zoomHours * 3600
 
   return (
     <>
@@ -71,7 +108,7 @@ function App() {
             <p className="eyebrow">timeline / analysis panel</p>
             <h1>注意力分析面板</h1>
             <p className="hero-text">
-              以图表为主查看一天内的应用切换、域名停留和 presence 状态。
+              主时间线只展示应用与状态。点击浏览器应用段后，右侧展开该时间段对应的域名明细。
             </p>
           </div>
 
@@ -97,6 +134,8 @@ function App() {
                 className={`toggle-button ${activeOnly ? 'is-active' : ''}`}
                 onClick={() => {
                   setActiveOnly((value) => !value)
+                  setDomainFilter(null)
+                  setSelectedBrowserSegmentId(null)
                 }}
               >
                 {activeOnly ? 'On' : 'Off'}
@@ -155,19 +194,74 @@ function App() {
               <MetaPill label="date" value={timeline?.date ?? '--'} />
               <MetaPill label="tz" value={timeline?.timezone ?? '--'} />
               <MetaPill label="focus" value={`${dashboard.meta.focusCount}`} />
-              <MetaPill label="domains" value={`${dashboard.meta.browserCount}`} />
+              <MetaPill label="browser" value={`${dashboard.meta.browserCount}`} />
               <MetaPill label="presence" value={`${dashboard.meta.presenceCount}`} />
-              {filter ? (
-                <button
-                  type="button"
-                  className="clear-filter-button"
-                  onClick={() => {
-                    setFilter(null)
-                  }}
-                >
-                  清除筛选
-                </button>
-              ) : null}
+            </section>
+
+            <section className="zoom-panel panel">
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">scale</p>
+                  <h2>时间尺度缩放</h2>
+                </div>
+                <p className="timezone-label">
+                  当前窗口 {formatHourLabel(viewStartHour)} -{' '}
+                  {formatHourLabel(viewStartHour + zoomHours)}
+                </p>
+              </div>
+
+              <div className="zoom-controls">
+                <div className="zoom-buttons">
+                  {ZOOM_OPTIONS.map((hours) => (
+                    <button
+                      key={hours}
+                      type="button"
+                      className={`zoom-button ${zoomHours === hours ? 'is-active' : ''}`}
+                      onClick={() => {
+                        setZoomHours(hours)
+                      }}
+                    >
+                      {hours === 24 ? '24h' : `${hours}h`}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="range-controls">
+                  <button
+                    type="button"
+                    className="zoom-button"
+                    onClick={() => {
+                      setViewStartHour((current) => Math.max(current - Math.max(zoomHours / 2, 1), 0))
+                    }}
+                    disabled={viewStartHour <= 0}
+                  >
+                    ←
+                  </button>
+                  <input
+                    className="range-slider"
+                    type="range"
+                    min={0}
+                    max={24 - zoomHours}
+                    step={0.5}
+                    value={viewStartHour}
+                    onChange={(event) => {
+                      setViewStartHour(Number(event.target.value))
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="zoom-button"
+                    onClick={() => {
+                      setViewStartHour((current) =>
+                        Math.min(current + Math.max(zoomHours / 2, 1), 24 - zoomHours),
+                      )
+                    }}
+                    disabled={viewStartHour >= 24 - zoomHours}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
             </section>
 
             <section className="dashboard-grid">
@@ -175,11 +269,9 @@ function App() {
                 <div className="panel-header">
                   <div>
                     <p className="section-kicker">timeline</p>
-                    <h2>24 小时时间线</h2>
+                    <h2>应用主时间线</h2>
                   </div>
-                  <p className="timezone-label">
-                    hover 查看详情{activeOnly ? ' / active only' : ''}
-                  </p>
+                  <p className="timezone-label">点击浏览器应用段查看域名明细</p>
                 </div>
 
                 <TimelineChart
@@ -187,14 +279,8 @@ function App() {
                     {
                       id: 'focus',
                       label: '应用',
-                      filterKind: 'app',
                       segments: dashboard.focusSegments,
-                    },
-                    {
-                      id: 'browser',
-                      label: '域名',
-                      filterKind: 'domain',
-                      segments: dashboard.browserSegments,
+                      selectedKey: appFilter?.key ?? null,
                     },
                     {
                       id: 'presence',
@@ -202,8 +288,26 @@ function App() {
                       segments: dashboard.presenceSegments,
                     },
                   ]}
-                  filter={filter}
+                  viewStartSec={viewStartSec}
+                  viewEndSec={viewEndSec}
+                  selectedSegmentId={selectedBrowserSegment?.id ?? null}
                   onHover={setTooltip}
+                  onSelectSegment={(segment) => {
+                    if (segment.tone !== 'focus') {
+                      return
+                    }
+
+                    if (segment.isBrowser) {
+                      setSelectedBrowserSegmentId((current) =>
+                        current === segment.id ? null : segment.id,
+                      )
+                      setDomainFilter(null)
+                      return
+                    }
+
+                    setSelectedBrowserSegmentId(null)
+                    setDomainFilter(null)
+                  }}
                 />
               </div>
 
@@ -213,28 +317,73 @@ function App() {
                     title="应用分布"
                     totalLabel={formatDuration(dashboard.summary.focusSeconds)}
                     slices={dashboard.appSlices}
-                    filter={filter}
+                    filter={appFilter}
                     filterKind="app"
-                    onSelect={setFilter}
+                    onSelect={(nextFilter) => {
+                      setAppFilter(nextFilter)
+                    }}
                     onHover={setTooltip}
                   />
                 </div>
 
-                <div className="panel">
-                  <DonutChart
-                    title="域名分布"
-                    totalLabel={formatDuration(
-                      dashboard.browserSegments.reduce(
-                        (sum, segment) => sum + segment.durationSec,
-                        0,
-                      ),
-                    )}
-                    slices={dashboard.domainSlices}
-                    filter={filter}
-                    filterKind="domain"
-                    onSelect={setFilter}
-                    onHover={setTooltip}
-                  />
+                <div className="panel browser-detail-panel">
+                  <div className="panel-header">
+                    <div>
+                      <p className="section-kicker">browser detail</p>
+                      <h2>浏览器域名明细</h2>
+                    </div>
+                    {selectedBrowserSegment ? (
+                      <p className="timezone-label">
+                        {formatClockRange(
+                          selectedBrowserSegment.startSec,
+                          selectedBrowserSegment.endSec,
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {selectedBrowserSegment ? (
+                    <>
+                      <div className="browser-context">
+                        <strong>{selectedBrowserSegment.label}</strong>
+                        <span>{selectedBrowserSegment.detail}</span>
+                      </div>
+
+                      <div className="browser-detail-grid">
+                        <DonutChart
+                          title="域名占比"
+                          totalLabel={formatDuration(browserDetail.totalSeconds)}
+                          slices={browserDetail.slices}
+                          filter={domainFilter}
+                          filterKind="domain"
+                          onSelect={(nextFilter) => {
+                            setDomainFilter(nextFilter)
+                          }}
+                          onHover={setTooltip}
+                        />
+
+                        <div className="detail-timeline-card">
+                          <TimelineChart
+                            rows={[
+                              {
+                                id: 'domain-detail',
+                                label: '域名',
+                                segments: browserDetail.segments,
+                                selectedKey: domainFilter?.key ?? null,
+                              },
+                            ]}
+                            viewStartSec={selectedBrowserSegment.startSec}
+                            viewEndSec={selectedBrowserSegment.endSec}
+                            onHover={setTooltip}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="empty-card browser-empty">
+                      点击主时间线里的浏览器应用段后，这里会显示该时间段内各个域名占用的时间。
+                    </div>
+                  )}
                 </div>
               </aside>
             </section>
@@ -279,6 +428,12 @@ function todayString() {
   const month = `${now.getMonth() + 1}`.padStart(2, '0')
   const day = `${now.getDate()}`.padStart(2, '0')
   return `${now.getFullYear()}-${month}-${day}`
+}
+
+function formatHourLabel(hours: number) {
+  const whole = Math.floor(hours)
+  const minutes = Math.round((hours - whole) * 60)
+  return `${`${whole}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`
 }
 
 export default App

@@ -1,53 +1,109 @@
 /*
- * Browser bridge for reporting active tab domain changes to the local desktop agent.
- * The worker stays intentionally small: it reports only domain and title metadata.
+ * Browser bridge for reporting the focused browser window's active tab.
+ * Each browser window can have its own active tab, so we cache per-window state
+ * and only send the active tab belonging to the currently focused window.
  */
 
 const AGENT_BASE_URL = 'http://127.0.0.1:46215'
 const HEARTBEAT_ALARM = 'timeline-heartbeat'
+const activeTabsByWindow = new Map()
+let focusedWindowId = chrome.windows.WINDOW_ID_NONE
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(HEARTBEAT_ALARM, {
-    periodInMinutes: 1,
-  })
-  void reportCurrentTab('installed')
+  ensureHeartbeat()
+  void bootstrapState('installed')
 })
 
 chrome.runtime.onStartup.addListener(() => {
-  chrome.alarms.create(HEARTBEAT_ALARM, {
-    periodInMinutes: 1,
-  })
-  void reportCurrentTab('startup')
+  ensureHeartbeat()
+  void bootstrapState('startup')
 })
 
-chrome.tabs.onActivated.addListener(() => {
-  void reportCurrentTab('tab_activated')
-})
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tab = await chrome.tabs.get(activeInfo.tabId)
+  cacheActiveTab(tab)
 
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-  if (changeInfo.url || changeInfo.status === 'complete' || tab.active) {
-    void reportTab(tab, 'tab_updated')
+  if (activeInfo.windowId === focusedWindowId) {
+    await reportTab(tab, 'tab_activated')
   }
 })
 
-chrome.windows.onFocusChanged.addListener(() => {
-  void reportCurrentTab('window_focus_changed')
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (!tab.active || typeof tab.windowId !== 'number') {
+    return
+  }
+
+  cacheActiveTab(tab)
+
+  const changed = changeInfo.url || changeInfo.title || changeInfo.status === 'complete'
+  if (changed && tab.windowId === focusedWindowId) {
+    void reportTab(tab, 'active_tab_updated')
+  }
+})
+
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  const current = activeTabsByWindow.get(removeInfo.windowId)
+  if (current?.id === tabId) {
+    activeTabsByWindow.delete(removeInfo.windowId)
+  }
+})
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  activeTabsByWindow.delete(windowId)
+  if (focusedWindowId === windowId) {
+    focusedWindowId = chrome.windows.WINDOW_ID_NONE
+  }
+})
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  focusedWindowId = windowId
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    return
+  }
+
+  void reportFocusedWindowTab('window_focus_changed')
 })
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) {
-    void reportCurrentTab('heartbeat')
+    void reportFocusedWindowTab('heartbeat')
   }
 })
 
-async function reportCurrentTab(reason) {
-  const [tab] = await chrome.tabs.query({
-    active: true,
-    lastFocusedWindow: true,
-  })
+async function bootstrapState(reason) {
+  await syncActiveTabs()
+  const focusedWindow = await chrome.windows.getLastFocused()
+  focusedWindowId = focusedWindow?.id ?? chrome.windows.WINDOW_ID_NONE
+  await reportFocusedWindowTab(reason)
+}
 
-  if (!tab) {
+async function syncActiveTabs() {
+  const activeTabs = await chrome.tabs.query({ active: true })
+  activeTabsByWindow.clear()
+
+  for (const tab of activeTabs) {
+    cacheActiveTab(tab)
+  }
+}
+
+async function reportFocusedWindowTab(reason) {
+  if (focusedWindowId === chrome.windows.WINDOW_ID_NONE) {
     return
+  }
+
+  let tab = activeTabsByWindow.get(focusedWindowId) ?? null
+  if (!tab) {
+    const [currentTab] = await chrome.tabs.query({
+      active: true,
+      windowId: focusedWindowId,
+    })
+
+    if (!currentTab) {
+      return
+    }
+
+    cacheActiveTab(currentTab)
+    tab = currentTab
   }
 
   await reportTab(tab, reason)
@@ -70,6 +126,14 @@ async function reportTab(tab, reason) {
   } catch (error) {
     console.warn(`timeline browser bridge skipped event: ${reason}`, error)
   }
+}
+
+function cacheActiveTab(tab) {
+  if (!tab || !tab.active || typeof tab.windowId !== 'number') {
+    return
+  }
+
+  activeTabsByWindow.set(tab.windowId, tab)
 }
 
 function buildPayload(tab) {
@@ -95,4 +159,10 @@ function buildPayload(tab) {
     tab_id: tab.id,
     observed_at: new Date().toISOString(),
   }
+}
+
+function ensureHeartbeat() {
+  chrome.alarms.create(HEARTBEAT_ALARM, {
+    periodInMinutes: 1,
+  })
 }
