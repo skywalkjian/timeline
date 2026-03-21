@@ -24,9 +24,10 @@ export function DonutChart(props: {
   filterKind: 'app' | 'domain'
   onSelect: (filter: DashboardFilter) => void
 }) {
+  const displaySlices = useMemo(() => collapseSlices(props.slices, 5), [props.slices])
   const sliceByLabel = useMemo(
-    () => new Map(props.slices.map((slice) => [slice.label, slice])),
-    [props.slices],
+    () => new Map(displaySlices.map((slice) => [slice.label, slice])),
+    [displaySlices],
   )
 
   const option = useMemo<echarts.EChartsOption>(() => {
@@ -58,6 +59,7 @@ export function DonutChart(props: {
         },
       },
       legend: {
+        data: displaySlices.map((slice) => slice.label),
         orient: 'vertical',
         top: 'middle',
         right: 10,
@@ -74,8 +76,10 @@ export function DonutChart(props: {
           }
 
           const isActive = isFilterActive(props.filter, props.filterKind, slice.key)
-          const nameStyle = isActive ? 'nameActive' : 'name'
-          const metaStyle = isActive ? 'metaActive' : 'meta'
+          const hasActiveFilter = props.filter?.kind === props.filterKind
+          const isDimmed = hasActiveFilter && !isActive
+          const nameStyle = isActive ? 'nameActive' : isDimmed ? 'nameDim' : 'name'
+          const metaStyle = isActive ? 'metaActive' : isDimmed ? 'metaDim' : 'meta'
 
           return `{${nameStyle}|${truncateLabel(label, 18)}}\n{${metaStyle}|${formatDuration(
             slice.value,
@@ -90,6 +94,9 @@ export function DonutChart(props: {
               width: LEGEND_WIDTH,
               overflow: 'truncate',
               lineHeight: 16,
+              padding: [2, 6, 2, 6],
+              borderRadius: 6,
+              backgroundColor: 'rgba(79, 124, 255, 0)',
             },
             nameActive: {
               color: '#13315c',
@@ -98,15 +105,29 @@ export function DonutChart(props: {
               width: LEGEND_WIDTH,
               overflow: 'truncate',
               lineHeight: 16,
-              backgroundColor: 'rgba(79, 124, 255, 0.12)',
-              borderRadius: 6,
               padding: [2, 6, 2, 6],
+              borderRadius: 6,
+              backgroundColor: 'rgba(79, 124, 255, 0.14)',
+            },
+            nameDim: {
+              color: '#8fa0b8',
+              fontSize: 11,
+              fontWeight: 500,
+              width: LEGEND_WIDTH,
+              overflow: 'truncate',
+              lineHeight: 16,
+              padding: [2, 6, 2, 6],
+              borderRadius: 6,
+              backgroundColor: 'rgba(79, 124, 255, 0)',
             },
             meta: {
               color: MUTED_COLOR,
               fontFamily: MONO_FAMILY,
               fontSize: 10,
               lineHeight: 14,
+              padding: [1, 6, 1, 6],
+              borderRadius: 6,
+              backgroundColor: 'rgba(79, 124, 255, 0)',
             },
             metaActive: {
               color: '#31598f',
@@ -114,9 +135,18 @@ export function DonutChart(props: {
               fontSize: 10,
               fontWeight: 600,
               lineHeight: 14,
-              backgroundColor: 'rgba(79, 124, 255, 0.08)',
-              borderRadius: 6,
               padding: [1, 6, 1, 6],
+              borderRadius: 6,
+              backgroundColor: 'rgba(79, 124, 255, 0.1)',
+            },
+            metaDim: {
+              color: '#9aabc1',
+              fontFamily: MONO_FAMILY,
+              fontSize: 10,
+              lineHeight: 14,
+              padding: [1, 6, 1, 6],
+              borderRadius: 6,
+              backgroundColor: 'rgba(79, 124, 255, 0)',
             },
           },
         },
@@ -138,7 +168,7 @@ export function DonutChart(props: {
             scale: true,
             scaleSize: 8,
           },
-          data: props.slices.map((slice) => {
+          data: displaySlices.map((slice) => {
             const isActive = isFilterActive(props.filter, props.filterKind, slice.key)
             const shouldDim =
               props.filter?.kind === props.filterKind &&
@@ -184,9 +214,16 @@ export function DonutChart(props: {
         },
       ],
     }
-  }, [props.filter, props.filterKind, props.slices, props.title, props.totalLabel, sliceByLabel])
+  }, [
+    displaySlices,
+    props.filter,
+    props.filterKind,
+    props.title,
+    props.totalLabel,
+    sliceByLabel,
+  ])
 
-  if (props.slices.length === 0) {
+  if (displaySlices.length === 0) {
     return <div className="empty-card">没有可展示的数据</div>
   }
 
@@ -248,4 +285,34 @@ function truncateLabel(value: string, maxLength: number) {
   }
 
   return `${value.slice(0, Math.max(maxLength - 1, 1))}…`
+}
+
+function collapseSlices(slices: DonutSlice[], keepTopN: number) {
+  if (slices.length <= keepTopN) {
+    return slices
+  }
+
+  const primary = slices.filter((slice) => slice.key !== 'others').slice(0, keepTopN)
+  const remainder = slices.filter(
+    (slice) => slice.key === 'others' || !primary.some((item) => item.key === slice.key),
+  )
+
+  if (remainder.length === 0) {
+    return primary
+  }
+
+  const otherValue = remainder.reduce((sum, slice) => sum + slice.value, 0)
+  const totalValue = primary.reduce((sum, slice) => sum + slice.value, 0) + otherValue
+
+  return [
+    ...primary,
+    {
+      id: 'slice-others-collapsed',
+      key: 'others',
+      label: 'Others',
+      value: otherValue,
+      percentage: totalValue === 0 ? 0 : (otherValue / totalValue) * 100,
+      color: '#94a3b8',
+    },
+  ]
 }
