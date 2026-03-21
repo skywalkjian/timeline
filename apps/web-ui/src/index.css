@@ -1,15 +1,15 @@
-/* Global visual system for the timeline dashboard. */
+/* Global visual system for the technical analysis dashboard. */
 
 :root {
   font-family:
-    "Segoe UI Variable",
     "Inter",
+    "Segoe UI Variable",
     "PingFang SC",
     "Microsoft YaHei",
     sans-serif;
   --mono-family:
-    "Cascadia Code",
     "JetBrains Mono",
+    "Cascadia Code",
     "SFMono-Regular",
     Consolas,
     monospace;
@@ -17,18 +17,19 @@
   font-weight: 400;
   color: #0f1726;
   background:
-    linear-gradient(180deg, #f5f7fb 0%, #eef2f8 100%);
+    radial-gradient(circle at top right, rgba(79, 124, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, #f4f7fb 0%, #ecf1f8 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   --text-main: #0f1726;
-  --text-soft: #516072;
-  --text-dim: #6b7788;
-  --panel-bg: rgba(255, 255, 255, 0.88);
+  --text-soft: #546274;
+  --text-dim: #6d7b8d;
+  --panel-bg: rgba(255, 255, 255, 0.9);
   --panel-border: rgba(130, 145, 165, 0.18);
   --input-border: rgba(130, 145, 165, 0.24);
-  --input-bg: #f8fafc;
+  --input-bg: rgba(248, 250, 252, 0.96);
   --lane-border: rgba(130, 145, 165, 0.2);
 }
 
@@ -54,14 +55,14 @@ strong {
 }
 
 h1 {
-  font-size: 1.35rem;
-  line-height: 1.25;
+  font-size: 1.28rem;
+  line-height: 1.3;
   font-weight: 600;
 }
 
 h2 {
-  font-size: 1rem;
-  line-height: 1.3;
+  font-size: 0.98rem;
+  line-height: 1.35;
   font-weight: 600;
 }
 
@@ -72,4 +73,8 @@ label,
 input,
 button {
   font: inherit;
+}
+
+button {
+  appearance: none;
 }

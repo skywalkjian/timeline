@@ -1,0 +1,361 @@
+/* Data shaping helpers for interactive timeline and donut charts. */
+
+import type {
+  BrowserSegment,
+  FocusSegment,
+  PresenceSegment,
+  TimelineDayResponse,
+} from '../api'
+
+const DAY_SECONDS = 24 * 60 * 60
+const APP_PALETTE = ['#4f7cff', '#0ea5a4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
+const DOMAIN_PALETTE = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2']
+
+export type ChartTone = 'focus' | 'browser' | 'presence'
+export type FilterKind = 'app' | 'domain'
+
+export type DashboardFilter = {
+  kind: FilterKind
+  key: string
+} | null
+
+export type TooltipDatum = {
+  x: number
+  y: number
+  color: string
+  title: string
+  lines: string[]
+}
+
+export type ChartSegment = {
+  id: string
+  key: string
+  label: string
+  detail: string
+  tone: ChartTone
+  startSec: number
+  endSec: number
+  durationSec: number
+  color: string
+}
+
+export type DonutSlice = {
+  id: string
+  key: string
+  label: string
+  value: number
+  percentage: number
+  color: string
+}
+
+export type DashboardModel = {
+  focusSegments: ChartSegment[]
+  browserSegments: ChartSegment[]
+  presenceSegments: ChartSegment[]
+  appSlices: DonutSlice[]
+  domainSlices: DonutSlice[]
+  summary: {
+    focusSeconds: number
+    activeSeconds: number
+    longestFocusSeconds: number
+    switchCount: number
+  }
+  meta: {
+    focusCount: number
+    browserCount: number
+    presenceCount: number
+  }
+}
+
+type Interval = {
+  startSec: number
+  endSec: number
+}
+
+export function buildDashboardModel(
+  timeline: TimelineDayResponse,
+  activeOnly: boolean,
+): DashboardModel {
+  const activeIntervals = buildActiveIntervals(timeline.presence_segments)
+  const focusSegments = toFocusChartSegments(
+    timeline.focus_segments,
+    activeOnly ? activeIntervals : null,
+  )
+  const browserSegments = toBrowserChartSegments(
+    timeline.browser_segments,
+    activeOnly ? activeIntervals : null,
+  )
+  const presenceSegments = toPresenceChartSegments(timeline.presence_segments)
+
+  return {
+    focusSegments,
+    browserSegments,
+    presenceSegments,
+    appSlices: buildDonutSlices(focusSegments, 6),
+    domainSlices: buildDonutSlices(browserSegments, 6),
+    summary: {
+      focusSeconds: sumDurations(focusSegments),
+      activeSeconds: sumDurations(
+        presenceSegments.filter((segment) => segment.key === 'active'),
+      ),
+      longestFocusSeconds: focusSegments.reduce(
+        (max, segment) => Math.max(max, segment.durationSec),
+        0,
+      ),
+      switchCount: Math.max(focusSegments.length - 1, 0),
+    },
+    meta: {
+      focusCount: focusSegments.length,
+      browserCount: browserSegments.length,
+      presenceCount: presenceSegments.length,
+    },
+  }
+}
+
+export function formatDuration(seconds: number) {
+  if (seconds <= 0) {
+    return '0m'
+  }
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+
+  if (hours === 0) {
+    return `${minutes}m`
+  }
+
+  if (minutes === 0) {
+    return `${hours}h`
+  }
+
+  return `${hours}h ${minutes}m`
+}
+
+export function formatClockRange(startSec: number, endSec: number) {
+  return `${formatClock(startSec)} - ${formatClock(endSec)}`
+}
+
+export function isFilterActive(
+  filter: DashboardFilter,
+  kind: FilterKind,
+  key: string,
+) {
+  return filter?.kind === kind && filter.key === key
+}
+
+function toFocusChartSegments(segments: FocusSegment[], activeIntervals: Interval[] | null) {
+  const results: ChartSegment[] = []
+
+  for (const segment of segments) {
+    const ranges = clipSegment(
+      toRange(segment.started_at, segment.ended_at),
+      activeIntervals,
+    )
+
+    ranges.forEach((range, index) => {
+      const label = segment.app.display_name
+      const detail = segment.app.window_title ?? segment.app.process_name
+      results.push({
+        id: `focus-${segment.id}-${index}`,
+        key: segment.app.process_name,
+        label,
+        detail,
+        tone: 'focus',
+        startSec: range.startSec,
+        endSec: range.endSec,
+        durationSec: range.endSec - range.startSec,
+        color: colorForKey(segment.app.process_name, APP_PALETTE),
+      })
+    })
+  }
+
+  return results
+}
+
+function toBrowserChartSegments(
+  segments: BrowserSegment[],
+  activeIntervals: Interval[] | null,
+) {
+  const results: ChartSegment[] = []
+
+  for (const segment of segments) {
+    const ranges = clipSegment(toRange(segment.started_at, segment.ended_at), activeIntervals)
+
+    ranges.forEach((range, index) => {
+      results.push({
+        id: `browser-${segment.id}-${index}`,
+        key: segment.domain,
+        label: segment.domain,
+        detail: segment.page_title ?? `标签页 ${segment.tab_id}`,
+        tone: 'browser',
+        startSec: range.startSec,
+        endSec: range.endSec,
+        durationSec: range.endSec - range.startSec,
+        color: colorForKey(segment.domain, DOMAIN_PALETTE),
+      })
+    })
+  }
+
+  return results
+}
+
+function toPresenceChartSegments(segments: PresenceSegment[]) {
+  const results: ChartSegment[] = []
+
+  for (const segment of segments) {
+    const range = toRange(segment.started_at, segment.ended_at)
+    if (!range) {
+      continue
+    }
+
+    const stateLabel = presenceLabel(segment.state)
+    results.push({
+      id: `presence-${segment.id}`,
+      key: segment.state,
+      label: stateLabel,
+      detail: `状态段 ${segment.id}`,
+      tone: 'presence',
+      startSec: range.startSec,
+      endSec: range.endSec,
+      durationSec: range.endSec - range.startSec,
+      color: presenceColor(segment.state),
+    })
+  }
+
+  return results
+}
+
+function buildActiveIntervals(segments: PresenceSegment[]) {
+  return segments
+    .filter((segment) => segment.state === 'active')
+    .map((segment) => toRange(segment.started_at, segment.ended_at))
+    .filter((segment): segment is Interval => segment !== null)
+}
+
+function buildDonutSlices(segments: ChartSegment[], topN: number) {
+  const grouped = new Map<string, { label: string; value: number; color: string }>()
+
+  for (const segment of segments) {
+    const current = grouped.get(segment.key)
+    if (current) {
+      current.value += segment.durationSec
+      continue
+    }
+
+    grouped.set(segment.key, {
+      label: segment.label,
+      value: segment.durationSec,
+      color: segment.color,
+    })
+  }
+
+  const total = Array.from(grouped.values()).reduce((sum, item) => sum + item.value, 0)
+  const sorted = Array.from(grouped.entries())
+    .map(([key, item]) => ({ key, ...item }))
+    .sort((left, right) => right.value - left.value)
+
+  const slices = sorted.slice(0, topN).map((item) => ({
+    id: `slice-${item.key}`,
+    key: item.key,
+    label: item.label,
+    value: item.value,
+    percentage: total === 0 ? 0 : (item.value / total) * 100,
+    color: item.color,
+  }))
+
+  if (sorted.length > topN) {
+    const otherValue = sorted.slice(topN).reduce((sum, item) => sum + item.value, 0)
+    slices.push({
+      id: 'slice-others',
+      key: 'others',
+      label: 'Others',
+      value: otherValue,
+      percentage: total === 0 ? 0 : (otherValue / total) * 100,
+      color: '#94a3b8',
+    })
+  }
+
+  return slices
+}
+
+function clipSegment(range: Interval | null, activeIntervals: Interval[] | null) {
+  if (!range) {
+    return []
+  }
+
+  if (!activeIntervals) {
+    return [range]
+  }
+
+  const clipped: Interval[] = []
+
+  for (const interval of activeIntervals) {
+    const startSec = Math.max(range.startSec, interval.startSec)
+    const endSec = Math.min(range.endSec, interval.endSec)
+
+    if (endSec > startSec) {
+      clipped.push({ startSec, endSec })
+    }
+  }
+
+  return clipped
+}
+
+function toRange(startedAt: string, endedAt: string | null): Interval | null {
+  if (!endedAt) {
+    return null
+  }
+
+  const startSec = toSecondsSinceMidnight(startedAt)
+  const endSec = toSecondsSinceMidnight(endedAt)
+  if (endSec <= startSec) {
+    return null
+  }
+
+  return {
+    startSec,
+    endSec,
+  }
+}
+
+function toSecondsSinceMidnight(value: string) {
+  const date = new Date(value)
+  const seconds = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds()
+  return Math.max(0, Math.min(seconds, DAY_SECONDS))
+}
+
+function formatClock(seconds: number) {
+  const clamped = Math.max(0, Math.min(seconds, DAY_SECONDS))
+  const hours = Math.floor(clamped / 3600)
+  const minutes = Math.floor((clamped % 3600) / 60)
+  return `${`${hours}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`
+}
+
+function sumDurations(segments: ChartSegment[]) {
+  return segments.reduce((sum, segment) => sum + segment.durationSec, 0)
+}
+
+function colorForKey(key: string, palette: string[]) {
+  const hash = Array.from(key).reduce((sum, character) => sum + character.charCodeAt(0), 0)
+  return palette[hash % palette.length]
+}
+
+function presenceLabel(state: PresenceSegment['state']) {
+  if (state === 'active') {
+    return 'Active'
+  }
+  if (state === 'idle') {
+    return 'Idle'
+  }
+  return 'Locked'
+}
+
+function presenceColor(state: PresenceSegment['state']) {
+  if (state === 'active') {
+    return '#22c55e'
+  }
+  if (state === 'idle') {
+    return '#64748b'
+  }
+  return '#334155'
+}
