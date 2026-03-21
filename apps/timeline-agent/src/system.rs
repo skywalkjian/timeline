@@ -6,7 +6,8 @@ use std::process::Command;
 use time::OffsetDateTime;
 use tracing::{error, info, warn};
 use tray_menu::{
-    Divider, MouseButton, MouseButtonState, PopupMenu, TextEntry, TrayIconBuilder, TrayIconEvent,
+    Divider, Icon, MouseButton, MouseButtonState, PopupMenu, TextEntry, TrayIconBuilder,
+    TrayIconEvent,
 };
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
@@ -63,7 +64,10 @@ pub fn spawn_tray(state: AgentState) {
 }
 
 fn run_tray_loop(state: AgentState) -> Result<()> {
+    let icon = build_tray_icon().context("failed to build tray icon image")?;
     let _tray = TrayIconBuilder::new()
+        .with_tooltip("Timeline Agent")
+        .with_icon(icon)
         .build()
         .context("failed to create tray icon")?;
     let receiver = TrayIconEvent::receiver();
@@ -116,4 +120,36 @@ fn run_tray_loop(state: AgentState) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn build_tray_icon() -> Result<Icon> {
+    const SIZE: u32 = 32;
+    let mut rgba = vec![0u8; (SIZE * SIZE * 4) as usize];
+
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let offset = ((y * SIZE + x) * 4) as usize;
+            let is_border = x < 2 || x >= SIZE - 2 || y < 2 || y >= SIZE - 2;
+            let is_vertical = (14..=17).contains(&x) && (6..=25).contains(&y);
+            let is_horizontal = (8..=23).contains(&x) && (7..=10).contains(&y);
+            let is_highlight = (20..=24).contains(&x) && (20..=24).contains(&y);
+
+            let (r, g, b, a) = if is_border {
+                (14, 23, 38, 255)
+            } else if is_vertical || is_horizontal {
+                (255, 255, 255, 255)
+            } else if is_highlight {
+                (86, 142, 255, 255)
+            } else {
+                (28, 90, 196, 255)
+            };
+
+            rgba[offset] = r;
+            rgba[offset + 1] = g;
+            rgba[offset + 2] = b;
+            rgba[offset + 3] = a;
+        }
+    }
+
+    Icon::from_rgba(rgba, SIZE, SIZE).context("failed to create tray icon from rgba")
 }
