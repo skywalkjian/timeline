@@ -3,17 +3,32 @@
 use crate::state::AgentState;
 use anyhow::{Context, Result};
 use std::process::Command;
+use std::time::{Duration, Instant};
+use tao::event::{Event, StartCause};
+use tao::event_loop::{ControlFlow, EventLoopBuilder};
+#[cfg(target_os = "windows")]
+use tao::platform::windows::EventLoopBuilderExtWindows;
 use time::OffsetDateTime;
 use tracing::{error, info, warn};
-use tray_menu::{
-    Divider, Icon, MouseButton, MouseButtonState, PopupMenu, TextEntry, TrayIconBuilder,
-    TrayIconEvent,
+use tray_icon::{
+    Icon, MouseButton, MouseButtonState, TrayIconBuilder,
+    menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, accelerator::Accelerator},
 };
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
 
 const AUTOSTART_REG_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const AUTOSTART_VALUE_NAME: &str = "TimelineAgent";
+const MENU_OPEN_ID: &str = "open";
+const MENU_QUIT_ID: &str = "quit";
+
+enum TrayUserEvent {
+    TrayClick {
+        button: MouseButton,
+        button_state: MouseButtonState,
+    },
+    Menu(MenuEvent),
+}
 
 pub fn autostart_enabled() -> Result<bool> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -64,62 +79,94 @@ pub fn spawn_tray(state: AgentState) {
 }
 
 fn run_tray_loop(state: AgentState) -> Result<()> {
-    let icon = build_tray_icon().context("failed to build tray icon image")?;
+    let mut event_loop_builder = EventLoopBuilder::<TrayUserEvent>::with_user_event();
+    #[cfg(target_os = "windows")]
+    event_loop_builder.with_any_thread(true);
+
+    let event_loop = event_loop_builder.build();
+    let tray_menu = build_tray_menu();
+    let tray_icon = build_tray_icon().context("failed to build tray icon image")?;
+    let open_id = MenuId::new(MENU_OPEN_ID);
+    let quit_id = MenuId::new(MENU_QUIT_ID);
+
+    let proxy = event_loop.create_proxy();
+    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+        if let tray_icon::TrayIconEvent::Click {
+            button,
+            button_state,
+            ..
+        } = event
+        {
+            let _ = proxy.send_event(TrayUserEvent::TrayClick {
+                button,
+                button_state,
+            });
+        }
+    }));
+
+    let proxy = event_loop.create_proxy();
+    MenuEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(TrayUserEvent::Menu(event));
+    }));
+
     let _tray = TrayIconBuilder::new()
         .with_tooltip("Timeline Agent")
-        .with_icon(icon)
+        .with_icon(tray_icon)
+        .with_menu(Box::new(tray_menu))
+        .with_menu_on_left_click(false)
         .build()
         .context("failed to create tray icon")?;
-    let receiver = TrayIconEvent::receiver();
+
     state.mark_tray_online_sync(OffsetDateTime::now_utc());
     info!("tray icon started");
 
-    loop {
-        if state.shutdown_requested() {
-            break;
+    let state_for_loop = state.clone();
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
+
+        if state_for_loop.shutdown_requested() {
+            *control_flow = ControlFlow::Exit;
+            return;
         }
 
-        if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(100)) {
-            state.mark_tray_online_sync(OffsetDateTime::now_utc());
-
-            match event {
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                } => {
-                    if let Err(error) = open_frontend(&state.config().web_ui_url) {
-                        warn!(?error, "failed to open frontend from tray click");
-                    }
-                }
-                TrayIconEvent::Click {
-                    button: MouseButton::Right,
-                    button_state: MouseButtonState::Up,
-                    position,
-                    ..
-                } => {
-                    let mut menu = PopupMenu::new();
-                    menu.add(&TextEntry::of("open", "打开时间线"));
-                    menu.add(&Divider);
-                    menu.add(&TextEntry::of("quit", "退出"));
-
-                    if let Some(id) = menu.popup(position) {
-                        if id.0 == "open" {
-                            if let Err(error) = open_frontend(&state.config().web_ui_url) {
-                                warn!(?error, "failed to open frontend from tray menu");
-                            }
-                        } else if id.0 == "quit" {
-                            state.request_shutdown();
-                            break;
-                        }
-                    }
-                }
-                _ => {}
+        match event {
+            Event::NewEvents(StartCause::Init) => {
+                state_for_loop.mark_tray_online_sync(OffsetDateTime::now_utc());
             }
+            Event::UserEvent(TrayUserEvent::TrayClick {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+            }) => {
+                state_for_loop.mark_tray_online_sync(OffsetDateTime::now_utc());
+                if let Err(error) = open_frontend(&state_for_loop.config().web_ui_url) {
+                    warn!(?error, "failed to open frontend from tray click");
+                }
+            }
+            Event::UserEvent(TrayUserEvent::Menu(menu_event)) => {
+                state_for_loop.mark_tray_online_sync(OffsetDateTime::now_utc());
+                if menu_event.id == open_id {
+                    if let Err(error) = open_frontend(&state_for_loop.config().web_ui_url) {
+                        warn!(?error, "failed to open frontend from tray menu");
+                    }
+                } else if menu_event.id == quit_id {
+                    state_for_loop.request_shutdown();
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
+            _ => {}
         }
-    }
+    });
+}
 
-    Ok(())
+fn build_tray_menu() -> Menu {
+    let menu = Menu::new();
+    let open_item = MenuItem::with_id(MENU_OPEN_ID, "打开时间线", true, None::<Accelerator>);
+    let quit_item = MenuItem::with_id(MENU_QUIT_ID, "退出", true, None::<Accelerator>);
+    menu.append(&open_item).expect("failed to append open menu item");
+    menu.append(&PredefinedMenuItem::separator())
+        .expect("failed to append tray separator");
+    menu.append(&quit_item).expect("failed to append quit menu item");
+    menu
 }
 
 fn build_tray_icon() -> Result<Icon> {
