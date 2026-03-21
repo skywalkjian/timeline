@@ -13,7 +13,7 @@ import {
 const LABEL_COLOR = '#1d2c43'
 const MUTED_COLOR = '#6f839f'
 const MONO_FAMILY = '"IBM Plex Mono", "SFMono-Regular", Consolas, monospace'
-const PIE_CENTER_X = '24%'
+const PIE_CENTER_X = '28%'
 const LEGEND_WIDTH = 132
 
 export function DonutChart(props: {
@@ -100,7 +100,7 @@ export function DonutChart(props: {
         {
           name: props.title,
           type: 'pie',
-          radius: ['56%', '76%'],
+          radius: ['54%', '74%'],
           center: [PIE_CENTER_X, '50%'],
           avoidLabelOverlap: true,
           label: { show: false },
@@ -190,7 +190,7 @@ export function DonutChart(props: {
             props.onSelect(isActive ? null : { kind: props.filterKind, key: slice.key })
           },
         }}
-        style={{ height: 272, width: '100%' }}
+        style={{ height: 272, width: '100%', paddingInline: 8 }}
       />
     </div>
   )
