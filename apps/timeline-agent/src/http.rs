@@ -4,7 +4,7 @@ use crate::{state::AgentState, system, trackers::sync_browser_event};
 use anyhow::Result;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Response};
 use axum::{
     Json, Router,
     routing::{get, post},
@@ -17,9 +17,10 @@ use serde::Deserialize;
 use time::format_description::parse;
 use time::{Date, Duration, OffsetDateTime};
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 
 pub fn build_router(state: AgentState) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/health", get(get_health))
         .route("/api/timeline/day", get(get_timeline_day))
         .route("/api/stats/apps", get(get_app_stats))
@@ -30,7 +31,18 @@ pub fn build_router(state: AgentState) -> Router {
         .route("/api/debug/recent-events", get(get_recent_events))
         .route("/api/events/browser", post(post_browser_event))
         .layer(build_cors_layer())
-        .with_state(state)
+        .with_state(state.clone());
+
+    if let Some(dist_dir) = state.config().web_ui_dist_dir() {
+        let index_file = dist_dir.join("index.html");
+        router.fallback_service(
+            ServeDir::new(dist_dir)
+                .append_index_html_on_directories(true)
+                .not_found_service(ServeFile::new(index_file)),
+        )
+    } else {
+        router.fallback(get(frontend_not_built))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,7 +125,7 @@ async fn get_settings(
     Ok(Json(ApiResponse::ok(AgentSettingsResponse {
         autostart_enabled,
         tray_enabled: state.config().tray_enabled,
-        web_ui_url: state.config().web_ui_url.clone(),
+        web_ui_url: state.config().effective_web_ui_url(),
         launch_command: state.launch_command(),
         monitors,
     })))
@@ -155,6 +167,15 @@ fn build_cors_layer() -> CorsLayer {
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any)
+}
+
+async fn frontend_not_built() -> impl IntoResponse {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Html(
+            "<!doctype html><html><head><meta charset=\"utf-8\"><title>timeline-agent</title></head><body><h1>前端尚未构建</h1><p>请在项目根目录先运行 <code>cd apps/web-ui &amp;&amp; npm run build</code>，然后重启 timeline-agent。</p></body></html>",
+        ),
+    )
 }
 
 async fn build_monitor_statuses(state: &AgentState) -> Vec<AgentMonitorStatus> {

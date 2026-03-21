@@ -138,14 +138,14 @@ fn run_tray_loop(state: AgentState) -> Result<()> {
                 button_state: MouseButtonState::Up,
             }) => {
                 state_for_loop.mark_tray_online_sync(OffsetDateTime::now_utc());
-                if let Err(error) = open_frontend(&state_for_loop.config().web_ui_url) {
+                if let Err(error) = open_frontend(&state_for_loop.config().effective_web_ui_url()) {
                     warn!(?error, "failed to open frontend from tray click");
                 }
             }
             Event::UserEvent(TrayUserEvent::Menu(menu_event)) => {
                 state_for_loop.mark_tray_online_sync(OffsetDateTime::now_utc());
                 if menu_event.id == open_id {
-                    if let Err(error) = open_frontend(&state_for_loop.config().web_ui_url) {
+                    if let Err(error) = open_frontend(&state_for_loop.config().effective_web_ui_url()) {
                         warn!(?error, "failed to open frontend from tray menu");
                     }
                 } else if menu_event.id == quit_id {

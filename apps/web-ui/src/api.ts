@@ -89,7 +89,16 @@ type ApiEnvelope<T> = {
 }
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:46215'
+  import.meta.env.VITE_API_BASE_URL ??
+  (isLocalDevServer() ? 'http://127.0.0.1:46215' : window.location.origin)
+
+function isLocalDevServer() {
+  return (
+    typeof window !== 'undefined' &&
+    ['127.0.0.1', 'localhost'].includes(window.location.hostname) &&
+    ['4173', '5173'].includes(window.location.port)
+  )
+}
 
 async function request<T>(path: string): Promise<T> {
   let response: Response
