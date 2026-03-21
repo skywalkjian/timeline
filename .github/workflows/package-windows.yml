@@ -1,0 +1,59 @@
+name: Package Windows App
+
+on:
+  workflow_dispatch:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web-ui/package-lock.json
+
+      - name: Install web-ui dependencies
+        working-directory: apps/web-ui
+        shell: pwsh
+        run: npm ci
+
+      - name: Ensure Rust toolchain is available
+        shell: pwsh
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
+          rustup default stable-x86_64-pc-windows-msvc
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build portable package and installer
+        shell: pwsh
+        run: .\scripts\build-installer.ps1
+
+      - name: Upload packaging outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: timeline-windows-packages
+          path: target/installer/output/*
+          if-no-files-found: error
+
+      - name: Attach packages to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/installer/output/*.exe
+            target/installer/output/*.zip
