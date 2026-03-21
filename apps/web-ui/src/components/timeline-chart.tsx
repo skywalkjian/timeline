@@ -1,4 +1,4 @@
-/* DevTools-inspired waterfall timeline with stacked lanes, navigator, and detail table. */
+/* ActivityWatch-inspired timeline with stacked lanes, navigator, and detail table. */
 
 import { useEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject, PointerEvent as ReactPointerEvent, WheelEvent } from 'react'
@@ -129,17 +129,10 @@ export function TimelineChart(props: {
   return (
     <section className="timeline-devtools">
       <div className="timeline-devtools-head">
-        <div className="timeline-devtools-title">
-          <span>Waterfall</span>
-          <strong>
-            {formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}
-          </strong>
-        </div>
-        <div className="timeline-devtools-stats">
-          <span>{layout.length} rows</span>
-          <span>{visibleItems.length} visible</span>
-          <span>{formatDuration(visibleDuration)}</span>
-        </div>
+        <strong>
+          {formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}
+        </strong>
+        <span>拖拽平移，滚轮缩放</span>
       </div>
 
       <div
@@ -155,7 +148,7 @@ export function TimelineChart(props: {
         }
       >
         <div className="timeline-axis">
-          <div className="timeline-axis-label">Name</div>
+          <div className="timeline-axis-label">名称</div>
           <div className="timeline-axis-track">
             {ticks.map((tick) => (
               <div
@@ -174,7 +167,7 @@ export function TimelineChart(props: {
             <div key={row.id} className="timeline-row-block">
               <div className="timeline-row-head">
                 <strong>{row.label}</strong>
-                <span>{row.lanes.length} lanes</span>
+                {row.lanes.length > 1 ? <span>{row.lanes.length} 层</span> : null}
               </div>
 
               <div className="timeline-row-lanes">
@@ -236,8 +229,8 @@ export function TimelineChart(props: {
       {props.interactiveZoom ? (
         <div className="timeline-overview-panel">
           <div className="timeline-overview-head">
-            <span>Overview</span>
-            <span>拖动窗口平移，拖两侧手柄缩放</span>
+            <span>全天缩放</span>
+            <span>{formatDuration(visibleDuration)}</span>
           </div>
 
           <div

@@ -99,273 +99,244 @@ function App() {
   const viewEndSec = viewStartSec + zoomHours * 3600
 
   return (
-      <main className="app-shell">
-        <section className="topbar-panel">
-          <div className="title-block">
-            <p className="eyebrow">timeline</p>
-            <h1>个人时间线</h1>
-            <p className="hero-text">
-              查看应用分布、active 时间和浏览器明细。
-            </p>
+    <main className="app-shell">
+      <section className="topbar-panel">
+        <div className="activity-header">
+          <p className="eyebrow">Activity</p>
+          <h1>{selectedDate} 的活动概览</h1>
+          <p className="hero-text">应用使用、active 时间和浏览器明细都在同一页查看。</p>
+          <div className="activity-meta">
+            <span>
+              <strong>Time active</strong>
+              {dashboard ? formatDuration(dashboard.summary.activeSeconds) : '--'}
+            </span>
+            <span>
+              <strong>Timezone</strong>
+              {timeline?.timezone ?? '--'}
+            </span>
+            <span>
+              <strong>Status</strong>
+              {error ? 'offline' : 'online'}
+            </span>
           </div>
+        </div>
 
-          <div className="toolbar-grid">
-            <label className="field-card">
-              <span>日期</span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => {
-                  const nextDate = event.target.value
-                  startTransition(() => {
-                    setSelectedDate(nextDate)
-                  })
-                }}
-              />
-            </label>
+        <div className="toolbar-grid">
+          <label className="field-card">
+            <span>日期</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => {
+                const nextDate = event.target.value
+                startTransition(() => {
+                  setSelectedDate(nextDate)
+                })
+              }}
+            />
+          </label>
 
-            <label className="toggle-card">
-              <span>active only</span>
-              <button
-                type="button"
-                className={`toggle-button ${activeOnly ? 'is-active' : ''}`}
-                onClick={() => {
-                  setActiveOnly((value) => !value)
-                  setDomainFilter(null)
-                  setSelectedBrowserSegmentId(null)
-                }}
-              >
-                {activeOnly ? 'On' : 'Off'}
-              </button>
-            </label>
-
+          <label className="toggle-card">
+            <span>active only</span>
             <button
               type="button"
-              className="action-button"
+              className={`toggle-button ${activeOnly ? 'is-active' : ''}`}
               onClick={() => {
-                setRefreshToken((value) => value + 1)
+                setActiveOnly((value) => !value)
+                setDomainFilter(null)
+                setSelectedBrowserSegmentId(null)
               }}
             >
-              刷新数据
+              {activeOnly ? 'On' : 'Off'}
             </button>
+          </label>
 
-            <div className="status-card">
-              <span>连接状态</span>
-              <strong className={error ? 'status-error' : 'status-ok'}>
-                {error ? 'Agent offline' : 'Agent online'}
-              </strong>
-              <small>{lastUpdatedAt ? `updated ${lastUpdatedAt}` : 'waiting'}</small>
-            </div>
+          <button
+            type="button"
+            className="action-button"
+            onClick={() => {
+              setRefreshToken((value) => value + 1)
+            }}
+          >
+            刷新数据
+          </button>
+
+          <div className="status-card">
+            <span>连接状态</span>
+            <strong className={error ? 'status-error' : 'status-ok'}>
+              {error ? 'Agent offline' : 'Agent online'}
+            </strong>
+            <small>{lastUpdatedAt ? `updated ${lastUpdatedAt}` : 'waiting'}</small>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {loading ? <LoadingState /> : null}
-        {error ? <ErrorState error={error} /> : null}
+      {loading ? <LoadingState /> : null}
+      {error ? <ErrorState error={error} /> : null}
 
-        {!loading && !error && dashboard ? (
-          <>
-            <section className="summary-grid summary-grid-single">
-              <SummaryCard
-                title="active 时长"
-                value={formatDuration(dashboard.summary.activeSeconds)}
-                caption="presence = active"
-              />
-            </section>
-
-            <section className="meta-strip">
-              <MetaPill label="date" value={timeline?.date ?? '--'} />
-              <MetaPill label="tz" value={timeline?.timezone ?? '--'} />
-              <MetaPill label="focus" value={`${dashboard.meta.focusCount}`} />
-              <MetaPill label="browser" value={`${dashboard.meta.browserCount}`} />
-              <MetaPill label="presence" value={`${dashboard.meta.presenceCount}`} />
-            </section>
-
-            <section className="dashboard-grid">
-              <div className="panel timeline-panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="section-kicker">timeline</p>
-                    <h2>应用主时间线</h2>
-                  </div>
-                  <div className="timeline-panel-actions">
-                    <p className="timezone-label">
-                      当前窗口 {formatHourLabel(viewStartHour)} -{' '}
-                      {formatHourLabel(viewStartHour + zoomHours)} / 最长 8h
-                    </p>
-                    {selectedBrowserSegment ? (
-                      <button
-                        type="button"
-                        className="zoom-button"
-                        onClick={() => {
-                          const nextZoom = clampZoomHours(
-                            Math.max(
-                              normalizeZoomHours(
-                                (selectedBrowserSegment.durationSec / 3600) * 1.6,
-                              ),
-                              MIN_ZOOM_HOURS,
-                            ),
-                          )
-                          const segmentMidpoint =
-                            selectedBrowserSegment.startSec +
-                            selectedBrowserSegment.durationSec / 2
-                          const nextStart = clampViewStart(
-                            segmentMidpoint / 3600 - nextZoom / 2,
-                            nextZoom,
-                          )
-                          setZoomHours(nextZoom)
-                          setViewStartHour(nextStart)
-                        }}
-                      >
-                        定位到选中段
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                <TimelineChart
-                  rows={[
-                    {
-                      id: 'focus',
-                      label: '应用',
-                      segments: dashboard.focusSegments,
-                      selectedKey: appFilter?.key ?? null,
-                    },
-                    {
-                      id: 'presence',
-                      label: '状态',
-                      segments: dashboard.presenceSegments,
-                    },
-                  ]}
-                  viewStartSec={viewStartSec}
-                  viewEndSec={viewEndSec}
-                  baseDate={selectedDate}
-                  interactiveZoom
-                  minViewHours={MIN_ZOOM_HOURS}
-                  maxViewHours={MAX_ZOOM_HOURS}
-                  selectedSegmentId={selectedBrowserSegment?.id ?? null}
-                  onViewportChange={(nextStartSec, nextEndSec) => {
-                    const nextZoom = clampZoomHours(
-                      normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
-                    )
-                    const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
-                    setZoomHours(nextZoom)
-                    setViewStartHour(clampViewStart(nextStartHour, nextZoom))
-                  }}
-                  onSelectSegment={(segment) => {
-                    if (segment.tone !== 'focus') {
-                      return
-                    }
-
-                    if (segment.isBrowser) {
-                      setSelectedBrowserSegmentId((current) =>
-                        current === segment.id ? null : segment.id,
+      {!loading && !error && dashboard ? (
+        <section className="analysis-stack">
+          <div className="panel timeline-panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">Timeline</p>
+                <h2>应用时间线</h2>
+              </div>
+              <div className="timeline-panel-actions">
+                <p className="timezone-label">
+                  当前窗口 {formatHourLabel(viewStartHour)} - {formatHourLabel(viewStartHour + zoomHours)}
+                </p>
+                {selectedBrowserSegment ? (
+                  <button
+                    type="button"
+                    className="zoom-button"
+                    onClick={() => {
+                      const nextZoom = clampZoomHours(
+                        Math.max(
+                          normalizeZoomHours((selectedBrowserSegment.durationSec / 3600) * 1.6),
+                          MIN_ZOOM_HOURS,
+                        ),
                       )
-                      setDomainFilter(null)
-                      return
-                    }
+                      const segmentMidpoint =
+                        selectedBrowserSegment.startSec + selectedBrowserSegment.durationSec / 2
+                      const nextStart = clampViewStart(
+                        segmentMidpoint / 3600 - nextZoom / 2,
+                        nextZoom,
+                      )
+                      setZoomHours(nextZoom)
+                      setViewStartHour(nextStart)
+                    }}
+                  >
+                    定位到选中段
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
-                    setSelectedBrowserSegmentId(null)
-                    setDomainFilter(null)
-                  }}
-                />
+            <TimelineChart
+              rows={[
+                {
+                  id: 'focus',
+                  label: '应用',
+                  segments: dashboard.focusSegments,
+                  selectedKey: appFilter?.key ?? null,
+                },
+                {
+                  id: 'presence',
+                  label: '状态',
+                  segments: dashboard.presenceSegments,
+                },
+              ]}
+              viewStartSec={viewStartSec}
+              viewEndSec={viewEndSec}
+              baseDate={selectedDate}
+              interactiveZoom
+              minViewHours={MIN_ZOOM_HOURS}
+              maxViewHours={MAX_ZOOM_HOURS}
+              selectedSegmentId={selectedBrowserSegment?.id ?? null}
+              onViewportChange={(nextStartSec, nextEndSec) => {
+                const nextZoom = clampZoomHours(
+                  normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
+                )
+                const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
+                setZoomHours(nextZoom)
+                setViewStartHour(clampViewStart(nextStartHour, nextZoom))
+              }}
+              onSelectSegment={(segment) => {
+                if (segment.tone !== 'focus') {
+                  return
+                }
+
+                if (segment.isBrowser) {
+                  setSelectedBrowserSegmentId((current) =>
+                    current === segment.id ? null : segment.id,
+                  )
+                  setDomainFilter(null)
+                  return
+                }
+
+                setSelectedBrowserSegmentId(null)
+                setDomainFilter(null)
+              }}
+            />
+          </div>
+
+          <section className="insight-grid">
+            <div className="panel">
+              <DonutChart
+                title="应用分布"
+                totalLabel={formatDuration(dashboard.summary.focusSeconds)}
+                slices={dashboard.appSlices}
+                filter={appFilter}
+                filterKind="app"
+                onSelect={(nextFilter) => {
+                  setAppFilter(nextFilter)
+                }}
+              />
+            </div>
+
+            <div className="panel browser-detail-panel">
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">Browser</p>
+                  <h2>浏览器域名明细</h2>
+                </div>
+                {selectedBrowserSegment ? (
+                  <p className="timezone-label">
+                    {formatClockRange(
+                      selectedBrowserSegment.startSec,
+                      selectedBrowserSegment.endSec,
+                    )}
+                  </p>
+                ) : null}
               </div>
 
-              <aside className="chart-stack">
-                <div className="panel">
-                  <DonutChart
-                    title="应用分布"
-                    totalLabel={formatDuration(dashboard.summary.focusSeconds)}
-                    slices={dashboard.appSlices}
-                    filter={appFilter}
-                    filterKind="app"
-                    onSelect={(nextFilter) => {
-                      setAppFilter(nextFilter)
-                    }}
-                  />
-                </div>
-
-                <div className="panel browser-detail-panel">
-                  <div className="panel-header">
-                    <div>
-                      <p className="section-kicker">browser detail</p>
-                      <h2>浏览器域名明细</h2>
-                    </div>
-                    {selectedBrowserSegment ? (
-                      <p className="timezone-label">
-                        {formatClockRange(
-                          selectedBrowserSegment.startSec,
-                          selectedBrowserSegment.endSec,
-                        )}
-                      </p>
-                    ) : null}
+              {selectedBrowserSegment ? (
+                <>
+                  <div className="browser-context">
+                    <strong>{selectedBrowserSegment.label}</strong>
+                    <span>{selectedBrowserSegment.detail}</span>
                   </div>
 
-                  {selectedBrowserSegment ? (
-                    <>
-                      <div className="browser-context">
-                        <strong>{selectedBrowserSegment.label}</strong>
-                        <span>{selectedBrowserSegment.detail}</span>
-                      </div>
+                  <div className="browser-detail-grid">
+                    <DonutChart
+                      title="域名占比"
+                      totalLabel={formatDuration(browserDetail.totalSeconds)}
+                      slices={browserDetail.slices}
+                      filter={domainFilter}
+                      filterKind="domain"
+                      onSelect={(nextFilter) => {
+                        setDomainFilter(nextFilter)
+                      }}
+                    />
 
-                      <div className="browser-detail-grid">
-                        <DonutChart
-                          title="域名占比"
-                          totalLabel={formatDuration(browserDetail.totalSeconds)}
-                          slices={browserDetail.slices}
-                          filter={domainFilter}
-                          filterKind="domain"
-                          onSelect={(nextFilter) => {
-                            setDomainFilter(nextFilter)
-                          }}
-                        />
-
-                        <div className="detail-timeline-card">
-                          <TimelineChart
-                            rows={[
-                              {
-                                id: 'domain-detail',
-                                label: '域名',
-                                segments: browserDetail.segments,
-                                selectedKey: domainFilter?.key ?? null,
-                              },
-                            ]}
-                            viewStartSec={selectedBrowserSegment.startSec}
-                            viewEndSec={selectedBrowserSegment.endSec}
-                            baseDate={selectedDate}
-                          />
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="empty-card browser-empty">
-                      点击主时间线里的浏览器应用段后，这里会显示该时间段内各个域名占用的时间。
+                    <div className="detail-timeline-card">
+                      <TimelineChart
+                        rows={[
+                          {
+                            id: 'domain-detail',
+                            label: '域名',
+                            segments: browserDetail.segments,
+                            selectedKey: domainFilter?.key ?? null,
+                          },
+                        ]}
+                        viewStartSec={selectedBrowserSegment.startSec}
+                        viewEndSec={selectedBrowserSegment.endSec}
+                        baseDate={selectedDate}
+                      />
                     </div>
-                  )}
+                  </div>
+                </>
+              ) : (
+                <div className="empty-card browser-empty">
+                  点击主时间线里的浏览器应用段后，这里会显示该时间段内各个域名占用的时间。
                 </div>
-              </aside>
-            </section>
-          </>
-        ) : null}
-      </main>
-  )
-}
-
-function SummaryCard(props: { title: string; value: string; caption: string }) {
-  return (
-    <article className="summary-card">
-      <span>{props.title}</span>
-      <strong>{props.value}</strong>
-      <small>{props.caption}</small>
-    </article>
-  )
-}
-
-function MetaPill(props: { label: string; value: string }) {
-  return (
-    <article className="meta-pill">
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </article>
+              )}
+            </div>
+          </section>
+        </section>
+      ) : null}
+    </main>
   )
 }
 

@@ -33,8 +33,8 @@ export function DonutChart(props: {
       tooltip: {
         trigger: 'item',
         appendToBody: true,
-        backgroundColor: 'rgba(14, 19, 28, 0.96)',
-        borderColor: 'rgba(92, 111, 145, 0.48)',
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderColor: 'rgba(145, 159, 180, 0.28)',
         borderWidth: 1,
         textStyle: {
           color: LABEL_COLOR,
@@ -58,7 +58,7 @@ export function DonutChart(props: {
       legend: {
         orient: 'vertical',
         top: 'middle',
-        right: 4,
+        right: 6,
         icon: 'circle',
         selectedMode: false,
         itemWidth: 10,
@@ -79,7 +79,7 @@ export function DonutChart(props: {
               color: LABEL_COLOR,
               fontSize: 12,
               fontWeight: 600,
-              width: 170,
+              width: 160,
               overflow: 'truncate',
             },
             meta: {
@@ -96,13 +96,13 @@ export function DonutChart(props: {
           name: props.title,
           type: 'pie',
           radius: ['58%', '80%'],
-          center: ['32%', '50%'],
+          center: ['30%', '50%'],
           avoidLabelOverlap: true,
           label: { show: false },
           labelLine: { show: false },
           itemStyle: {
             borderColor: '#f7faff',
-            borderWidth: 1.5,
+            borderWidth: 1,
           },
           emphasis: {
             scale: true,
@@ -137,13 +137,13 @@ export function DonutChart(props: {
           style: {
             text: props.totalLabel,
             fill: LABEL_COLOR,
-            font: `600 20px ${MONO_FAMILY}`,
+            font: `600 18px ${MONO_FAMILY}`,
             textAlign: 'center',
           },
         },
         {
           type: 'text',
-          left: '32%',
+          left: '30%',
           top: '53%',
           style: {
             text: 'total',
