@@ -1,3 +1,5 @@
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+
 //! Entry point for the Windows timeline agent that collects focus and presence data.
 
 mod config;

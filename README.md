@@ -109,7 +109,8 @@ npm run dev
 
 ### 便携版布局
 
-- 解压后可直接双击 `start-timeline.cmd`
+- 解压后优先双击 `start-timeline.vbs`，不会弹出终端窗口
+- `start-timeline.cmd` 保留为兼容启动方式
 - 默认使用包内的 `config\timeline-agent.toml`
 - 默认把数据库写到包内的 `data\`
 - 包内自带前端静态文件和浏览器扩展目录

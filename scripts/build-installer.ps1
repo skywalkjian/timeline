@@ -25,12 +25,24 @@ function Require-Command {
 }
 
 function Get-IsccPath {
+    if (-not [string]::IsNullOrWhiteSpace($env:ISCC_PATH) -and (Test-Path $env:ISCC_PATH)) {
+        return (Resolve-Path $env:ISCC_PATH).Path
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:INNO_SETUP_DIR)) {
+        $configuredPath = Join-Path $env:INNO_SETUP_DIR 'ISCC.exe'
+        if (Test-Path $configuredPath) {
+            return (Resolve-Path $configuredPath).Path
+        }
+    }
+
     $command = Get-Command 'iscc.exe' -ErrorAction SilentlyContinue
     if ($null -ne $command) {
         return $command.Source
     }
 
     $candidates = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
         'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
         'C:\Program Files\Inno Setup 6\ISCC.exe'
     )
@@ -193,12 +205,30 @@ endlocal
 
 Set-Content -Path (Join-Path $portableStage 'start-timeline.cmd') -Value $startCmd -Encoding ASCII
 
+$startVbs = @'
+Set shell = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+appDir = fso.GetParentFolderName(WScript.ScriptFullName)
+shell.Run """" & appDir & "\timeline-agent.exe"" --config """ & appDir & "\config\timeline-agent.toml""", 0, False
+WScript.Sleep 2000
+shell.Run "http://127.0.0.1:46215/#/stats", 0, False
+'@
+
+Set-Content -Path (Join-Path $portableStage 'start-timeline.vbs') -Value $startVbs -Encoding ASCII
+
 $openDashboardCmd = @'
 @echo off
 start "" "http://127.0.0.1:46215/#/stats"
 '@
 
 Set-Content -Path (Join-Path $portableStage 'open-dashboard.cmd') -Value $openDashboardCmd -Encoding ASCII
+
+$openDashboardVbs = @'
+Set shell = CreateObject("WScript.Shell")
+shell.Run "http://127.0.0.1:46215/#/stats", 0, False
+'@
+
+Set-Content -Path (Join-Path $portableStage 'open-dashboard.vbs') -Value $openDashboardVbs -Encoding ASCII
 
 $portableZip = Join-Path $outputRoot "timeline-portable-$packageVersion.zip"
 Remove-Item -Path $portableZip -Force -ErrorAction SilentlyContinue
@@ -211,6 +241,10 @@ if ($null -ne $isccPath) {
         "/DStageDir=$stageRoot" `
         "/DOutputDir=$outputRoot" `
         $issPath
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "ISCC.exe failed with exit code $LASTEXITCODE."
+    }
 
     $installer = Get-ChildItem -Path $outputRoot -Filter "timeline-setup-$packageVersion*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 

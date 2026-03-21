@@ -15,6 +15,15 @@
   #define OutputDir AddBackslash(SourcePath) + "..\\..\\target\\installer\\output"
 #endif
 
+#define ChineseSimplifiedMessagesFile "compiler:Languages\\ChineseSimplified.isl"
+#if FileExists(ChineseSimplifiedMessagesFile)
+  #define InstallerLanguageName "chinesesimplified"
+  #define InstallerMessagesFile ChineseSimplifiedMessagesFile
+#else
+  #define InstallerLanguageName "english"
+  #define InstallerMessagesFile "compiler:Default.isl"
+#endif
+
 [Setup]
 AppId={#MyAppId}
 AppName={#MyAppName}
@@ -34,7 +43,7 @@ OutputDir={#OutputDir}
 OutputBaseFilename=timeline-setup-{#MyAppVersion}
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "{#InstallerLanguageName}"; MessagesFile: "{#InstallerMessagesFile}"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: unchecked
