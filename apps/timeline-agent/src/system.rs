@@ -2,7 +2,8 @@
 
 use crate::state::AgentState;
 use anyhow::{Context, Result};
-use std::process::Command;
+use std::ffi::OsStr;
+use std::os::windows::ffi::OsStrExt;
 use std::time::{Duration, Instant};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -14,6 +15,9 @@ use tray_icon::{
     Icon, MouseButton, MouseButtonState, TrayIconBuilder,
     menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, accelerator::Accelerator},
 };
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
 
@@ -62,12 +66,29 @@ pub fn set_autostart_enabled(state: &AgentState, enabled: bool) -> Result<bool> 
 }
 
 pub fn open_frontend(url: &str) -> Result<()> {
-    Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .spawn()
-        .with_context(|| format!("failed to open frontend url {}", url))?;
+    let operation = to_wide("open");
+    let target = to_wide(url);
+
+    let result = unsafe {
+        ShellExecuteW(
+            Some(HWND::default()),
+            windows::core::PCWSTR(operation.as_ptr()),
+            windows::core::PCWSTR(target.as_ptr()),
+            windows::core::PCWSTR::null(),
+            windows::core::PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+
+    if result.0 as usize <= 32 {
+        anyhow::bail!("ShellExecuteW failed with code {}", result.0 as usize);
+    }
 
     Ok(())
+}
+
+fn to_wide(value: &str) -> Vec<u16> {
+    OsStr::new(value).encode_wide().chain(Some(0)).collect()
 }
 
 pub fn spawn_tray(state: AgentState) {
