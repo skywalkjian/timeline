@@ -85,29 +85,29 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <p className="eyebrow">Windows 本地个人注意力时间线系统</p>
-          <h1>把一天的注意力切换，画成可以复盘的时间线。</h1>
+      <section className="topbar-panel">
+        <div className="title-block">
+          <p className="eyebrow">timeline / local focus viewer</p>
+          <h1>注意力时间线</h1>
           <p className="hero-text">
-            当前页面直接连接本机 `desktop-agent`，展示应用时间线、域名时间线和
-            `active / idle / locked` 状态。
+            本地展示应用、域名与 active / idle / locked 状态，重点是当天行为数据本身。
           </p>
         </div>
-        <label className="date-card">
-          <span>选择日期</span>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(event) => {
-              const nextDate = event.target.value
-              startTransition(() => {
-                setSelectedDate(nextDate)
-              })
-            }}
-          />
-          <small>按本地时区读取每日数据</small>
-        </label>
+        <div className="toolbar-block">
+          <label className="date-card">
+            <span>日期</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => {
+                const nextDate = event.target.value
+                startTransition(() => {
+                  setSelectedDate(nextDate)
+                })
+              }}
+            />
+          </label>
+        </div>
       </section>
 
       {loading ? <LoadingState /> : null}
@@ -115,6 +115,23 @@ function App() {
 
       {!loading && !error && dashboard ? (
         <>
+          <section className="meta-grid">
+            <MetaItem label="日期" value={dashboard.timeline.date} />
+            <MetaItem label="时区" value={dashboard.timeline.timezone} />
+            <MetaItem
+              label="应用段"
+              value={`${dashboard.timeline.focus_segments.length}`}
+            />
+            <MetaItem
+              label="域名段"
+              value={`${dashboard.timeline.browser_segments.length}`}
+            />
+            <MetaItem
+              label="状态段"
+              value={`${dashboard.timeline.presence_segments.length}`}
+            />
+          </section>
+
           <section className="summary-grid">
             <SummaryCard
               title="专注总时长"
@@ -141,10 +158,10 @@ function App() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <p className="section-kicker">每日时间线</p>
-                <h2>应用、域名与状态叠加查看</h2>
+                <p className="section-kicker">timeline</p>
+                <h2>应用、域名、状态</h2>
               </div>
-              <p className="timezone-label">时区偏移 {dashboard.timeline.timezone}</p>
+              <p className="timezone-label">24h / local day</p>
             </div>
 
             <div className="timeline-block">
@@ -190,8 +207,8 @@ function App() {
             <div className="panel">
               <div className="panel-header">
                 <div>
-                  <p className="section-kicker">时间分布</p>
-                  <h2>Top 应用</h2>
+                  <p className="section-kicker">apps</p>
+                  <h2>应用分布</h2>
                 </div>
               </div>
               <StatsTable rows={dashboard.appStats} emptyLabel="当天还没有应用时间线数据" />
@@ -200,8 +217,8 @@ function App() {
             <div className="panel">
               <div className="panel-header">
                 <div>
-                  <p className="section-kicker">浏览器分布</p>
-                  <h2>Top 域名</h2>
+                  <p className="section-kicker">domains</p>
+                  <h2>域名分布</h2>
                 </div>
               </div>
               <StatsTable rows={dashboard.domainStats} emptyLabel="当天还没有域名时间线数据" />
@@ -211,8 +228,8 @@ function App() {
           <section className="panel focus-panel">
             <div className="panel-header">
               <div>
-                <p className="section-kicker">基础分析</p>
-                <h2>专注概览</h2>
+                <p className="section-kicker">focus</p>
+                <h2>基础指标</h2>
               </div>
             </div>
             <div className="focus-metrics">
@@ -233,6 +250,15 @@ function App() {
         </>
       ) : null}
     </main>
+  )
+}
+
+function MetaItem(props: { label: string; value: string }) {
+  return (
+    <article className="meta-card">
+      <span>{props.label}</span>
+      <strong>{props.value}</strong>
+    </article>
   )
 }
 

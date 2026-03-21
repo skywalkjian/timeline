@@ -2,25 +2,34 @@
 
 :root {
   font-family:
-    "Aptos",
     "Segoe UI Variable",
+    "Inter",
     "PingFang SC",
     "Microsoft YaHei",
     sans-serif;
+  --mono-family:
+    "Cascadia Code",
+    "JetBrains Mono",
+    "SFMono-Regular",
+    Consolas,
+    monospace;
   line-height: 1.5;
   font-weight: 400;
-  color: #17211d;
+  color: #0f1726;
   background:
-    radial-gradient(circle at top, rgba(255, 202, 129, 0.3), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(125, 186, 167, 0.28), transparent 30%),
-    linear-gradient(180deg, #f6f1e8 0%, #eef3ef 100%);
+    linear-gradient(180deg, #f5f7fb 0%, #eef2f8 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --text-main: #17211d;
-  --text-soft: #5f6f68;
-  --accent-strong: #1f6a59;
+  --text-main: #0f1726;
+  --text-soft: #516072;
+  --text-dim: #6b7788;
+  --panel-bg: rgba(255, 255, 255, 0.88);
+  --panel-border: rgba(130, 145, 165, 0.18);
+  --input-border: rgba(130, 145, 165, 0.24);
+  --input-bg: #f8fafc;
+  --lane-border: rgba(130, 145, 165, 0.2);
 }
 
 * {
@@ -41,23 +50,19 @@ body {
 h1,
 h2,
 strong {
-  font-family:
-    "Georgia",
-    "Times New Roman",
-    "Songti SC",
-    serif;
   color: var(--text-main);
 }
 
 h1 {
-  font-size: clamp(2.6rem, 5vw, 4.4rem);
-  line-height: 1;
-  letter-spacing: -0.04em;
+  font-size: 1.35rem;
+  line-height: 1.25;
+  font-weight: 600;
 }
 
 h2 {
-  font-size: clamp(1.4rem, 2vw, 1.9rem);
-  line-height: 1.1;
+  font-size: 1rem;
+  line-height: 1.3;
+  font-weight: 600;
 }
 
 p,
