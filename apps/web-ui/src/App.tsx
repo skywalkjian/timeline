@@ -283,6 +283,7 @@ function App() {
                   ]}
                   viewStartSec={viewStartSec}
                   viewEndSec={viewEndSec}
+                  baseDate={selectedDate}
                   interactiveZoom
                   minViewHours={MIN_ZOOM_HOURS}
                   maxViewHours={MAX_ZOOM_HOURS}
@@ -375,6 +376,7 @@ function App() {
                             ]}
                             viewStartSec={selectedBrowserSegment.startSec}
                             viewEndSec={selectedBrowserSegment.endSec}
+                            baseDate={selectedDate}
                           />
                         </div>
                       </div>
