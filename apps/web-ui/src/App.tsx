@@ -460,50 +460,54 @@ function StatsPage(props: {
       </section>
 
       <section className="stats-support-grid">
-        <div className="panel stats-calendar-card">
-          <div className="panel-header">
-            <div>
-              <p className="section-kicker">Calendar</p>
-              <h2>月度日历</h2>
+        <div className="page-content-layout">
+          <div className="page-content-main">
+            <div className="panel page-panel stats-calendar-card">
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">Calendar</p>
+                  <h2>月度日历</h2>
+                </div>
+              </div>
+              {props.monthCalendar ? (
+                <CalendarGrid
+                  month={props.calendarMonth}
+                  days={props.monthCalendar.days}
+                  selectedDate={props.selectedDate}
+                  todayDate={props.agentToday}
+                  onSelectDate={props.onSelectDate}
+                  onMonthChange={props.onCalendarMonthChange}
+                />
+              ) : props.calendarError ? (
+                <div className="state-card error-card">{props.calendarError}</div>
+              ) : (
+                <div className="state-card">正在加载该月份的汇总日历…</div>
+              )}
             </div>
           </div>
-          {props.monthCalendar ? (
-            <CalendarGrid
-              month={props.calendarMonth}
-              days={props.monthCalendar.days}
-              selectedDate={props.selectedDate}
-              todayDate={props.agentToday}
-              onSelectDate={props.onSelectDate}
-              onMonthChange={props.onCalendarMonthChange}
-            />
-          ) : props.calendarError ? (
-            <div className="state-card error-card">{props.calendarError}</div>
-          ) : (
-            <div className="state-card">正在加载该月份的汇总日历…</div>
-          )}
-        </div>
 
-        <div className="stats-side-stack">
-          <div className="panel">
-            <DonutChart
-              title="应用分布"
-              totalLabel={formatDuration(props.dashboard.summary.focusSeconds)}
-              slices={props.dashboard.appSlices}
-              filter={props.appFilter}
-              filterKind="app"
-              onSelect={props.setAppFilter}
-            />
-          </div>
+          <div className="page-content-side stats-side-stack">
+            <div className="panel page-panel">
+              <DonutChart
+                title="应用分布"
+                totalLabel={formatDuration(props.dashboard.summary.focusSeconds)}
+                slices={props.dashboard.appSlices}
+                filter={props.appFilter}
+                filterKind="app"
+                onSelect={props.setAppFilter}
+              />
+            </div>
 
-          <div className="panel">
-            <DonutChart
-              title="域名分布"
-              totalLabel={formatDuration(sumSlices(props.dashboard.domainSlices))}
-              slices={props.dashboard.domainSlices}
-              filter={props.domainFilter}
-              filterKind="domain"
-              onSelect={props.setDomainFilter}
-            />
+            <div className="panel page-panel">
+              <DonutChart
+                title="域名分布"
+                totalLabel={formatDuration(sumSlices(props.dashboard.domainSlices))}
+                slices={props.dashboard.domainSlices}
+                filter={props.domainFilter}
+                filterKind="domain"
+                onSelect={props.setDomainFilter}
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -873,142 +877,148 @@ function TimelinePage(props: {
 
   return (
     <section className="page-stack">
-      <div className="panel timeline-panel">
-        <div className="panel-header">
-          <div>
-            <p className="section-kicker">时间线</p>
-            <h2>应用时间线</h2>
-          </div>
-          <div className="timeline-panel-actions">
-            <p className="timezone-label">
-              当前窗口 {formatHourLabel(props.viewStartHour)} -{' '}
-              {formatHourLabel(props.viewStartHour + props.zoomHours)}
-            </p>
-            {selectedBrowserSegment ? (
-              <button
-                type="button"
-                className="zoom-button"
-                onClick={() => {
-                  const nextZoom = clampZoomHours(
-                    Math.max(
-                      normalizeZoomHours((selectedBrowserSegment.durationSec / 3600) * 1.6),
-                      MIN_ZOOM_HOURS,
-                    ),
-                  )
-                  const segmentMidpoint =
-                    selectedBrowserSegment.startSec + selectedBrowserSegment.durationSec / 2
-                  const nextStart = clampViewStart(
-                    segmentMidpoint / 3600 - nextZoom / 2,
-                    nextZoom,
-                  )
-                  props.setZoomHours(nextZoom)
-                  props.setViewStartHour(nextStart)
-                }}
-              >
-                定位到选中段
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <TimelineChart
-          rows={[
-            {
-              id: 'focus-overview',
-              label: '应用总览',
-              segments: props.dashboard.focusSegments,
-              selectedKey: props.appFilter?.key ?? null,
-              splitByKey: false,
-              includeInOverview: false,
-              includeInTable: false,
-            },
-            {
-              id: 'focus',
-              label: '应用',
-              segments: props.dashboard.focusSegments,
-              selectedKey: props.appFilter?.key ?? null,
-            },
-            {
-              id: 'presence',
-              label: '状态',
-              segments: props.dashboard.presenceSegments,
-              includeInTable: false,
-            },
-          ]}
-          viewStartSec={props.viewStartSec}
-          viewEndSec={props.viewEndSec}
-          baseDate={props.selectedDate}
-          interactiveZoom
-          minViewHours={MIN_ZOOM_HOURS}
-          maxViewHours={MAX_ZOOM_HOURS}
-          showTable
-          selectedSegmentId={props.selectedBrowserSegmentId}
-          onViewportChange={(nextStartSec, nextEndSec) => {
-            const nextZoom = clampZoomHours(
-              normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
-            )
-            const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
-            props.setZoomHours(nextZoom)
-            props.setViewStartHour(clampViewStart(nextStartHour, nextZoom))
-          }}
-          onSelectSegment={(segment) => {
-            if (segment.tone !== 'focus') {
-              return
-            }
-
-            if (segment.isBrowser) {
-              props.setSelectedBrowserSegmentId((current) =>
-                current === segment.id ? null : segment.id,
-              )
-              props.setDomainFilter(null)
-              return
-            }
-
-            props.setSelectedBrowserSegmentId(null)
-            props.setDomainFilter(null)
-          }}
-        />
-      </div>
-
-      <div className="panel browser-detail-panel">
-        <div className="panel-header">
-          <div>
-            <p className="section-kicker">浏览器</p>
-            <h2>浏览器域名明细</h2>
-          </div>
-          {selectedBrowserSegment ? (
-            <p className="timezone-label">
-              {formatClockRange(
-                selectedBrowserSegment.startSec,
-                selectedBrowserSegment.endSec,
-              )}
-            </p>
-          ) : null}
-        </div>
-
-        {selectedBrowserSegment ? (
-          <>
-            <div className="browser-context">
-              <strong>{selectedBrowserSegment.label}</strong>
-              <span>{selectedBrowserSegment.detail}</span>
-            </div>
-
-            <div className="insight-grid browser-detail-layout">
-              <div className="panel panel-subtle browser-summary-panel">
-                <BrowserDomainList
-                  slices={props.browserDetail.slices}
-                  filter={props.domainFilter}
-                  onSelect={props.setDomainFilter}
-                  totalLabel={formatDuration(props.browserDetail.totalSeconds)}
-                />
+      <div className="page-content-layout">
+        <div className="page-content-main">
+          <div className="panel page-panel timeline-panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">时间线</p>
+                <h2>应用时间线</h2>
+              </div>
+              <div className="timeline-panel-actions">
+                <p className="timezone-label">
+                  当前窗口 {formatHourLabel(props.viewStartHour)} -{' '}
+                  {formatHourLabel(props.viewStartHour + props.zoomHours)}
+                </p>
+                {selectedBrowserSegment ? (
+                  <button
+                    type="button"
+                    className="zoom-button"
+                    onClick={() => {
+                      const nextZoom = clampZoomHours(
+                        Math.max(
+                          normalizeZoomHours((selectedBrowserSegment.durationSec / 3600) * 1.6),
+                          MIN_ZOOM_HOURS,
+                        ),
+                      )
+                      const segmentMidpoint =
+                        selectedBrowserSegment.startSec + selectedBrowserSegment.durationSec / 2
+                      const nextStart = clampViewStart(
+                        segmentMidpoint / 3600 - nextZoom / 2,
+                        nextZoom,
+                      )
+                      props.setZoomHours(nextZoom)
+                      props.setViewStartHour(nextStart)
+                    }}
+                  >
+                    定位到选中段
+                  </button>
+                ) : null}
               </div>
             </div>
-          </>
-        ) : (
-          <div className="empty-card browser-empty">
-            点击主时间线里的浏览器应用段后，这里会显示该时间段内各个域名占用的时间。
+
+            <TimelineChart
+              rows={[
+                {
+                  id: 'focus-overview',
+                  label: '应用总览',
+                  segments: props.dashboard.focusSegments,
+                  selectedKey: props.appFilter?.key ?? null,
+                  splitByKey: false,
+                  includeInOverview: false,
+                  includeInTable: false,
+                },
+                {
+                  id: 'focus',
+                  label: '应用',
+                  segments: props.dashboard.focusSegments,
+                  selectedKey: props.appFilter?.key ?? null,
+                },
+                {
+                  id: 'presence',
+                  label: '状态',
+                  segments: props.dashboard.presenceSegments,
+                  includeInTable: false,
+                },
+              ]}
+              viewStartSec={props.viewStartSec}
+              viewEndSec={props.viewEndSec}
+              baseDate={props.selectedDate}
+              interactiveZoom
+              minViewHours={MIN_ZOOM_HOURS}
+              maxViewHours={MAX_ZOOM_HOURS}
+              showTable
+              selectedSegmentId={props.selectedBrowserSegmentId}
+              onViewportChange={(nextStartSec, nextEndSec) => {
+                const nextZoom = clampZoomHours(
+                  normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
+                )
+                const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
+                props.setZoomHours(nextZoom)
+                props.setViewStartHour(clampViewStart(nextStartHour, nextZoom))
+              }}
+              onSelectSegment={(segment) => {
+                if (segment.tone !== 'focus') {
+                  return
+                }
+
+                if (segment.isBrowser) {
+                  props.setSelectedBrowserSegmentId((current) =>
+                    current === segment.id ? null : segment.id,
+                  )
+                  props.setDomainFilter(null)
+                  return
+                }
+
+                props.setSelectedBrowserSegmentId(null)
+                props.setDomainFilter(null)
+              }}
+            />
           </div>
-        )}
+        </div>
+
+        <div className="page-content-side">
+          <div className="panel page-panel browser-detail-panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">浏览器</p>
+                <h2>浏览器域名明细</h2>
+              </div>
+              {selectedBrowserSegment ? (
+                <p className="timezone-label">
+                  {formatClockRange(
+                    selectedBrowserSegment.startSec,
+                    selectedBrowserSegment.endSec,
+                  )}
+                </p>
+              ) : null}
+            </div>
+
+            {selectedBrowserSegment ? (
+              <>
+                <div className="browser-context">
+                  <strong>{selectedBrowserSegment.label}</strong>
+                  <span>{selectedBrowserSegment.detail}</span>
+                </div>
+
+                <div className="insight-grid browser-detail-layout">
+                  <div className="panel panel-subtle browser-summary-panel">
+                    <BrowserDomainList
+                      slices={props.browserDetail.slices}
+                      filter={props.domainFilter}
+                      onSelect={props.setDomainFilter}
+                      totalLabel={formatDuration(props.browserDetail.totalSeconds)}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="empty-card browser-empty">
+                点击主时间线里的浏览器应用段后，这里会显示该时间段内各个域名占用的时间。
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -1025,91 +1035,97 @@ function SettingsPage(props: {
   onToggleAutostart: (enabled: boolean) => Promise<void>
 }) {
   return (
-    <section className="page-stack settings-grid">
-      <div className="panel settings-card">
-        <p className="section-kicker">服务</p>
-        <h2>本地服务</h2>
-        <dl className="settings-list">
-          <div>
-            <dt>接口地址</dt>
-            <dd>{API_BASE_URL}</dd>
-          </div>
-          <div>
-            <dt>前端地址</dt>
-            <dd>{props.agentSettings?.web_ui_url ?? '--'}</dd>
-          </div>
-          <div>
-            <dt>连接状态</dt>
-            <dd>{props.error ? '离线' : '在线'}</dd>
-          </div>
-          <div>
-            <dt>最后更新</dt>
-            <dd>{props.lastUpdatedAt ?? '等待连接'}</dd>
-          </div>
-          <div>
-            <dt>启动命令</dt>
-            <dd>{props.agentSettings?.launch_command ?? '--'}</dd>
-          </div>
-        </dl>
-      </div>
-
-      <div className="panel settings-card">
-        <p className="section-kicker">监视器</p>
-        <h2>监视器状态</h2>
-        <div className="monitor-list">
-          {props.agentSettings?.monitors.map((monitor) => (
-            <article key={monitor.key} className="monitor-card">
-              <div className="monitor-head">
-                <strong>{monitor.label}</strong>
-                <span className={`monitor-badge is-${monitor.status}`}>{monitor.status}</span>
+    <section className="page-stack">
+      <div className="page-content-layout">
+        <div className="page-content-main page-card-stack">
+          <div className="panel page-panel settings-card">
+            <p className="section-kicker">服务</p>
+            <h2>本地服务</h2>
+            <dl className="settings-list">
+              <div>
+                <dt>接口地址</dt>
+                <dd>{API_BASE_URL}</dd>
               </div>
-              <p>{monitor.detail}</p>
-              <small>
-                {monitor.last_seen ? `最后活跃 ${new Date(monitor.last_seen).toLocaleTimeString()}` : '等待首次心跳'}
-              </small>
-            </article>
-          )) ?? <div className="empty-card">正在读取监视器状态…</div>}
+              <div>
+                <dt>前端地址</dt>
+                <dd>{props.agentSettings?.web_ui_url ?? '--'}</dd>
+              </div>
+              <div>
+                <dt>连接状态</dt>
+                <dd>{props.error ? '离线' : '在线'}</dd>
+              </div>
+              <div>
+                <dt>最后更新</dt>
+                <dd>{props.lastUpdatedAt ?? '等待连接'}</dd>
+              </div>
+              <div>
+                <dt>启动命令</dt>
+                <dd>{props.agentSettings?.launch_command ?? '--'}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="panel page-panel settings-card">
+            <p className="section-kicker">启动</p>
+            <h2>启动与当前视图</h2>
+            <dl className="settings-list">
+              <div>
+                <dt>开机自启动</dt>
+                <dd>
+                  <button
+                    type="button"
+                    className={`toggle-button ${props.agentSettings?.autostart_enabled ? 'is-active' : ''}`}
+                    disabled={props.savingAutostart}
+                    onClick={() => {
+                      void props.onToggleAutostart(!(props.agentSettings?.autostart_enabled ?? false))
+                    }}
+                  >
+                    {props.savingAutostart
+                      ? '保存中…'
+                      : props.agentSettings?.autostart_enabled
+                        ? '已启用'
+                        : '已禁用'}
+                  </button>
+                </dd>
+              </div>
+              <div>
+                <dt>托盘菜单</dt>
+                <dd>{props.agentSettings?.tray_enabled ? '已启用' : '已禁用'}</dd>
+              </div>
+              <div>
+                <dt>日期</dt>
+                <dd>{props.selectedDate}</dd>
+              </div>
+              <div>
+                <dt>时区</dt>
+                <dd>{props.timezone}</dd>
+              </div>
+            </dl>
+
+            {props.settingsError ? <div className="settings-error">{props.settingsError}</div> : null}
+          </div>
         </div>
-      </div>
 
-      <div className="panel settings-card">
-        <p className="section-kicker">启动</p>
-        <h2>启动与当前视图</h2>
-        <dl className="settings-list">
-          <div>
-            <dt>开机自启动</dt>
-            <dd>
-              <button
-                type="button"
-                className={`toggle-button ${props.agentSettings?.autostart_enabled ? 'is-active' : ''}`}
-                disabled={props.savingAutostart}
-                onClick={() => {
-                  void props.onToggleAutostart(!(props.agentSettings?.autostart_enabled ?? false))
-                }}
-              >
-                {props.savingAutostart
-                  ? '保存中…'
-                  : props.agentSettings?.autostart_enabled
-                    ? '已启用'
-                    : '已禁用'}
-              </button>
-            </dd>
+        <div className="page-content-side">
+          <div className="panel page-panel settings-card settings-monitor-card">
+            <p className="section-kicker">监视器</p>
+            <h2>监视器状态</h2>
+            <div className="monitor-list">
+              {props.agentSettings?.monitors.map((monitor) => (
+                <article key={monitor.key} className="monitor-card">
+                  <div className="monitor-head">
+                    <strong>{monitor.label}</strong>
+                    <span className={`monitor-badge is-${monitor.status}`}>{monitor.status}</span>
+                  </div>
+                  <p>{monitor.detail}</p>
+                  <small>
+                    {monitor.last_seen ? `最后活跃 ${new Date(monitor.last_seen).toLocaleTimeString()}` : '等待首次心跳'}
+                  </small>
+                </article>
+              )) ?? <div className="empty-card">正在读取监视器状态…</div>}
+            </div>
           </div>
-          <div>
-            <dt>托盘菜单</dt>
-            <dd>{props.agentSettings?.tray_enabled ? '已启用' : '已禁用'}</dd>
-          </div>
-          <div>
-            <dt>日期</dt>
-            <dd>{props.selectedDate}</dd>
-          </div>
-          <div>
-            <dt>时区</dt>
-            <dd>{props.timezone}</dd>
-          </div>
-        </dl>
-
-        {props.settingsError ? <div className="settings-error">{props.settingsError}</div> : null}
+        </div>
       </div>
     </section>
   )

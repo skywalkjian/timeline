@@ -237,6 +237,25 @@
   margin-top: 14px;
 }
 
+.page-content-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.page-content-main,
+.page-content-side,
+.page-card-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.page-panel {
+  border-radius: 22px;
+}
+
 .stats-showcase-grid {
   display: grid;
   grid-template-columns: minmax(260px, 0.95fr) minmax(320px, 1.15fr) minmax(260px, 0.9fr);
@@ -244,15 +263,11 @@
 }
 
 .stats-support-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.92fr);
-  gap: 16px;
-  align-items: start;
+  display: block;
 }
 
 .stats-side-stack {
-  display: grid;
-  gap: 16px;
+  align-self: start;
 }
 
 .showcase-card {
@@ -737,6 +752,8 @@
 
 .browser-detail-panel {
   min-height: 420px;
+  position: sticky;
+  top: 18px;
 }
 
 .browser-context {
@@ -876,12 +893,13 @@
   border-color: rgba(180, 35, 24, 0.15);
 }
 
-.settings-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .settings-card h2 {
   margin: 2px 0 14px;
+}
+
+.settings-monitor-card {
+  position: sticky;
+  top: 18px;
 }
 
 .timeline-chart-host,
@@ -1607,11 +1625,13 @@
 @media (max-width: 1280px) {
 
   .stats-showcase-grid,
-  .stats-support-grid,
   .stats-grid,
-  .settings-grid,
   .browser-detail-layout,
   .calendar-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-content-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -1623,6 +1643,12 @@
 
   .sidebar-shell {
     position: static;
+  }
+
+  .browser-detail-panel,
+  .settings-monitor-card {
+    position: static;
+    top: auto;
   }
 
   .page-header {
