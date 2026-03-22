@@ -235,8 +235,7 @@ export function CompactDonutChart(props: {
             borderWidth: 1,
           },
           emphasis: {
-            scale: true,
-            scaleSize: 8,
+            scale: false,
           },
           data: displaySlices.map((slice) => {
             const isActive = props.selectedKey === slice.key
@@ -247,7 +246,7 @@ export function CompactDonutChart(props: {
               name: slice.label,
               raw: slice,
               selected: isActive,
-              selectedOffset: 8,
+              selectedOffset: 0,
               itemStyle: {
                 color: slice.color,
                 opacity: shouldDim ? 0.24 : 0.96,
@@ -307,7 +306,14 @@ export function CompactDonutChart(props: {
   ])
 
   if (displaySlices.length === 0) {
-    return <div className="empty-card">{props.emptyLabel ?? '没有可展示的数据'}</div>
+    return (
+      <div
+        className="empty-card compact-donut-empty"
+        style={{ minHeight: props.height ?? 220 }}
+      >
+        {props.emptyLabel ?? '没有可展示的数据'}
+      </div>
+    )
   }
 
   return (

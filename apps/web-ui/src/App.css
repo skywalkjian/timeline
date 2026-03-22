@@ -545,12 +545,28 @@
 }
 
 .weekly-bar-column:hover .weekly-bar-track {
-  background: rgba(215, 221, 231, 0.96);
+  background: rgba(171, 185, 205, 1);
+  box-shadow:
+    0 14px 28px rgba(54, 70, 96, 0.2),
+    inset 0 0 0 1px rgba(84, 103, 132, 0.28);
+  transform: translateY(-3px);
+}
+
+.weekly-bar-column:hover .weekly-bar {
+  filter: saturate(1.08) brightness(1.03);
+}
+
+.weekly-bar-column:hover .weekly-bar-day {
+  color: #173861;
+  font-weight: 700;
 }
 
 .weekly-bar-column:focus-visible .weekly-bar-track {
-  background: rgba(226, 232, 241, 1);
-  box-shadow: 0 0 0 3px rgba(47, 111, 219, 0.18);
+  background: rgba(191, 205, 225, 1);
+  box-shadow:
+    0 0 0 3px rgba(47, 111, 219, 0.18),
+    0 14px 28px rgba(54, 70, 96, 0.18);
+  transform: translateY(-3px);
 }
 
 .weekly-bar-column.is-selected .weekly-bar-day {
@@ -566,6 +582,10 @@
   border-radius: 18px;
   background: rgba(83, 93, 110, 0.18);
   overflow: hidden;
+  transition:
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
 
 .weekly-bar {
@@ -575,6 +595,7 @@
   bottom: 0;
   border-radius: 14px 14px 0 0;
   background: linear-gradient(180deg, #8b7dff, #6a59e5);
+  transition: filter 0.16s ease;
 }
 
 .weekly-bar-column.is-active .weekly-bar {
@@ -594,26 +615,6 @@
 
 .weekly-axis-label {
   white-space: nowrap;
-}
-
-.weekly-selection-note {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  color: var(--text-soft);
-  font-family: var(--mono-family);
-  font-size: 0.68rem;
-}
-
-.weekly-selection-note strong {
-  color: var(--text-main);
-  font-size: 0.74rem;
-}
-
-.weekly-selection-note span {
-  color: #2450a0;
-  font-weight: 600;
 }
 
 .mini-list-card {
@@ -696,38 +697,71 @@
   gap: 10px;
 }
 
-.presence-strip {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+.focus-distribution-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 16px;
+  align-items: start;
+}
+
+.presence-legend {
+  display: grid;
   gap: 8px;
+  width: 160px;
+  align-self: start;
 }
 
-.presence-strip span {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(145, 159, 180, 0.16);
-  color: var(--text-dim);
-  font-family: var(--mono-family);
-  font-size: 0.64rem;
-}
-
-.presence-pill {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(248, 250, 255, 0.96);
+.presence-legend-item {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
   border: 1px solid rgba(145, 159, 180, 0.18);
-  color: var(--text-dim);
-  font-family: var(--mono-family);
-  font-size: 0.64rem;
+  border-radius: 14px;
+  background: rgba(248, 250, 255, 0.96);
+  color: var(--text-main);
+  text-align: left;
+  font: inherit;
   cursor: pointer;
+  min-height: 58px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.presence-pill.is-selected {
+.presence-legend-item.is-selected {
   border-color: rgba(47, 111, 219, 0.34);
   background: rgba(235, 242, 255, 0.96);
-  color: #1e4691;
+}
+
+.presence-legend-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(47, 111, 219, 0.18);
+}
+
+.presence-legend-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-family: var(--mono-family);
+  font-size: 0.68rem;
+}
+
+.presence-legend-name i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.presence-legend-item strong {
+  display: block;
+  color: var(--text-main);
+  font-family: var(--mono-family);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  min-height: 1.2em;
+  white-space: nowrap;
 }
 
 .metric-card {
@@ -790,6 +824,14 @@
   font-size: 0.64rem;
   font-weight: 600;
   white-space: nowrap;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.refresh-badge.is-active {
+  visibility: visible;
+  opacity: 1;
 }
 
 .inline-error-banner {
@@ -1056,6 +1098,13 @@
   color: var(--text-dim);
   font-family: var(--mono-family);
   font-size: 0.8rem;
+}
+
+.compact-donut-empty {
+  display: grid;
+  width: 100%;
+  place-items: center;
+  text-align: center;
 }
 
 .state-card {
@@ -1992,6 +2041,7 @@
   .period-summary-grid,
   .stats-grid-lists,
   .showcase-stat-grid,
+  .focus-distribution-layout,
   .focus-metric-stack,
   .weekly-summary-row,
   .detail-meta-grid {

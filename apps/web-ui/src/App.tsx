@@ -453,7 +453,6 @@ function StatsPage(props: {
   const presenceByKey = new Map(
     props.dashboard.presenceSlices.map((slice) => [slice.key, slice.value]),
   )
-  const isCurrentDate = props.agentToday !== null && props.selectedDate === props.agentToday
 
   return (
     <section className="page-stack">
@@ -461,7 +460,6 @@ function StatsPage(props: {
         <WeeklyRhythmCard
           periodSummary={props.periodSummary}
           weekBars={weekBars}
-          isCurrentDate={isCurrentDate}
           refreshing={props.isPeriodRefreshing}
           onSelectDate={props.onSelectDate}
         />
@@ -470,7 +468,6 @@ function StatsPage(props: {
           activeSeconds={presenceByKey.get('active') ?? 0}
           idleSeconds={presenceByKey.get('idle') ?? 0}
           lockedSeconds={presenceByKey.get('locked') ?? 0}
-          isCurrentDate={isCurrentDate}
           refreshing={props.isTimelineRefreshing}
         />
       </section>
@@ -540,12 +537,10 @@ function StatsPage(props: {
 function WeeklyRhythmCard(props: {
   periodSummary: PeriodSummaryResponse | null
   weekBars: WeekBarDatum[]
-  isCurrentDate: boolean
   refreshing: boolean
   onSelectDate: (date: string) => void
 }) {
   const [selectedMetric, setSelectedMetric] = useState<'active' | 'focus'>('active')
-  const selectedBar = props.weekBars.find((bar) => bar.isSelected) ?? props.weekBars[props.weekBars.length - 1]
   const weekTotal =
     selectedMetric === 'active'
       ? props.periodSummary?.week.active_seconds ?? 0
@@ -554,16 +549,12 @@ function WeeklyRhythmCard(props: {
     selectedMetric === 'active'
       ? props.periodSummary?.month.active_seconds ?? 0
       : props.periodSummary?.month.focus_seconds ?? 0
-  const selectedDayValue =
-    selectedMetric === 'active'
-      ? selectedBar?.activeSeconds ?? 0
-      : selectedBar?.focusSeconds ?? 0
 
   return (
     <article className="showcase-card showcase-card-dashboard">
       <div className="showcase-card-head">
         <div>
-          <h2>{props.isCurrentDate ? '本周节奏' : '所在周节奏'}</h2>
+          <h2>本周节奏</h2>
         </div>
         <div className="card-head-side">
           <RefreshBadge active={props.refreshing} />
@@ -602,15 +593,6 @@ function WeeklyRhythmCard(props: {
         metric={selectedMetric}
         onSelectDate={props.onSelectDate}
       />
-
-      {selectedBar ? (
-        <div className="weekly-selection-note">
-          <strong>{selectedBar.dayLabel}</strong>
-          <span>
-            {selectedMetric === 'active' ? '活跃' : '应用'} {formatDuration(selectedDayValue)}
-          </span>
-        </div>
-      ) : null}
     </article>
   )
 }
@@ -620,7 +602,6 @@ function FocusBalanceCard(props: {
   activeSeconds: number
   idleSeconds: number
   lockedSeconds: number
-  isCurrentDate: boolean
   refreshing: boolean
 }) {
   const activeRatio =
@@ -668,27 +649,65 @@ function FocusBalanceCard(props: {
     <article className="showcase-card showcase-card-focus">
       <div className="showcase-card-head">
         <div>
-          <h2>{props.isCurrentDate ? '今天状态分布' : '当日状态分布'}</h2>
+          <h2>状态分布</h2>
         </div>
         <RefreshBadge active={props.refreshing} />
       </div>
 
-      <div className="showcase-donut-wrap">
-        <div className="showcase-compact-donut">
-          <CompactDonutChart
-            slices={presenceSlices}
-            totalLabel={formatDuration(selectedPresenceValue)}
-            secondaryLabel={selectedPresenceLabel}
-            footerLabel={`应用 ${formatDuration(props.dashboard.summary.focusSeconds)}`}
-            selectedKey={selectedPresenceKey}
-            onSelectKey={(key) => {
-              if (key === 'active' || key === 'idle' || key === 'locked') {
-                setSelectedPresenceKey(key)
-              }
-            }}
-            height={232}
-            emptyLabel="所选日期没有状态分布数据"
-          />
+      <div className="focus-distribution-layout">
+        <div className="showcase-donut-wrap">
+          <div className="showcase-compact-donut">
+            <CompactDonutChart
+              slices={presenceSlices}
+              totalLabel={formatDuration(selectedPresenceValue)}
+              secondaryLabel={selectedPresenceLabel}
+              footerLabel={`应用 ${formatDuration(props.dashboard.summary.focusSeconds)}`}
+              selectedKey={selectedPresenceKey}
+              onSelectKey={(key) => {
+                if (key === 'active' || key === 'idle' || key === 'locked') {
+                  setSelectedPresenceKey(key)
+                }
+              }}
+              height={232}
+              emptyLabel="所选日期没有状态分布数据"
+            />
+          </div>
+        </div>
+
+        <div className="presence-legend">
+          <button
+            type="button"
+            className={`presence-legend-item ${selectedPresenceKey === 'active' ? 'is-selected' : ''}`}
+            onClick={() => setSelectedPresenceKey('active')}
+          >
+            <span className="presence-legend-name">
+              <i style={{ backgroundColor: '#2f6fdb' }} />
+              活跃
+            </span>
+            <strong>{formatDuration(props.activeSeconds)}</strong>
+          </button>
+          <button
+            type="button"
+            className={`presence-legend-item ${selectedPresenceKey === 'idle' ? 'is-selected' : ''}`}
+            onClick={() => setSelectedPresenceKey('idle')}
+          >
+            <span className="presence-legend-name">
+              <i style={{ backgroundColor: '#43d6b0' }} />
+              空闲
+            </span>
+            <strong>{formatDuration(props.idleSeconds)}</strong>
+          </button>
+          <button
+            type="button"
+            className={`presence-legend-item ${selectedPresenceKey === 'locked' ? 'is-selected' : ''}`}
+            onClick={() => setSelectedPresenceKey('locked')}
+          >
+            <span className="presence-legend-name">
+              <i style={{ backgroundColor: '#8b7dff' }} />
+              锁定
+            </span>
+            <strong>{formatDuration(props.lockedSeconds)}</strong>
+          </button>
         </div>
       </div>
 
@@ -701,30 +720,6 @@ function FocusBalanceCard(props: {
           <span>活跃占比</span>
           <strong>{formatPercent(activeRatio)}</strong>
         </div>
-      </div>
-
-      <div className="presence-strip">
-        <button
-          type="button"
-          className={`presence-pill ${selectedPresenceKey === 'active' ? 'is-selected' : ''}`}
-          onClick={() => setSelectedPresenceKey('active')}
-        >
-          活跃 {formatDuration(props.activeSeconds)}
-        </button>
-        <button
-          type="button"
-          className={`presence-pill ${selectedPresenceKey === 'idle' ? 'is-selected' : ''}`}
-          onClick={() => setSelectedPresenceKey('idle')}
-        >
-          空闲 {formatDuration(props.idleSeconds)}
-        </button>
-        <button
-          type="button"
-          className={`presence-pill ${selectedPresenceKey === 'locked' ? 'is-selected' : ''}`}
-          onClick={() => setSelectedPresenceKey('locked')}
-        >
-          锁定 {formatDuration(props.lockedSeconds)}
-        </button>
       </div>
     </article>
   )
@@ -1206,7 +1201,8 @@ function InlineErrorState(props: { error: string }) {
 }
 
 function RefreshBadge(props: { active: boolean }) {
-  return props.active ? <span className="refresh-badge">更新中</span> : null
+  void props
+  return null
 }
 
 function useHashPage(): [AppPage, (page: AppPage) => void] {

@@ -1,18 +1,35 @@
 /* Global visual system for the technical analysis dashboard. */
 
 :root {
-  font-family:
-    "Inter",
-    "Segoe UI Variable",
+  --sans-family:
+    "Segoe UI Variable Text",
+    "Segoe UI",
     "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans CJK SC",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    sans-serif;
+  --display-family:
+    "Segoe UI Variable Display",
+    "Segoe UI Variable Text",
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans CJK SC",
+    "Microsoft YaHei UI",
     "Microsoft YaHei",
     sans-serif;
   --mono-family:
-    "JetBrains Mono",
-    "Cascadia Code",
-    "SFMono-Regular",
-    Consolas,
-    monospace;
+    "Segoe UI Variable Text",
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans CJK SC",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    sans-serif;
+  font-family: var(--sans-family);
   line-height: 1.5;
   font-weight: 400;
   color: #162033;
@@ -49,12 +66,15 @@ body {
   min-height: 100vh;
   color: var(--text-main);
   background: inherit;
+  font-family: var(--sans-family);
+  font-variant-numeric: tabular-nums;
 }
 
 h1,
 h2,
 strong {
   color: var(--text-main);
+  font-family: var(--display-family);
 }
 
 h1 {
