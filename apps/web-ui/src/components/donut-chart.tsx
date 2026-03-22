@@ -13,8 +13,7 @@ import {
 const LABEL_COLOR = '#1d2c43'
 const MUTED_COLOR = '#6f839f'
 const MONO_FAMILY = '"IBM Plex Mono", "SFMono-Regular", Consolas, monospace'
-const PIE_CENTER_X = '24%'
-const LEGEND_WIDTH = 148
+const PIE_CENTER_X = '50%'
 
 export function DonutChart(props: {
   title: string
@@ -29,10 +28,6 @@ export function DonutChart(props: {
   const rankingSlices = useMemo(
     () => props.slices.filter((slice) => slice.key !== 'others').slice(0, 5),
     [props.slices],
-  )
-  const sliceByLabel = useMemo(
-    () => new Map(displaySlices.map((slice) => [slice.label, slice])),
-    [displaySlices],
   )
 
   const option = useMemo<echarts.EChartsOption>(() => {
@@ -63,105 +58,12 @@ export function DonutChart(props: {
           ].join('')
         },
       },
-      legend: {
-        data: displaySlices.map((slice) => slice.label),
-        orient: 'vertical',
-        top: 'middle',
-        right: 2,
-        width: LEGEND_WIDTH,
-        icon: 'circle',
-        selectedMode: false,
-        itemWidth: 10,
-        itemHeight: 10,
-        itemGap: 8,
-        formatter: (label: string) => {
-          const slice = sliceByLabel.get(label)
-          if (!slice) {
-            return label
-          }
-
-          const isActive = isFilterActive(props.filter, props.filterKind, slice.key)
-          const hasActiveFilter = props.filter?.kind === props.filterKind
-          const isDimmed = hasActiveFilter && !isActive
-          const nameStyle = isActive ? 'nameActive' : isDimmed ? 'nameDim' : 'name'
-          const metaStyle = isActive ? 'metaActive' : isDimmed ? 'metaDim' : 'meta'
-
-          return `{${nameStyle}|${truncateLabel(label, 18)}}\n{${metaStyle}|${formatDuration(
-            slice.value,
-          )}  ${slice.percentage.toFixed(1)}%}`
-        },
-        textStyle: {
-          rich: {
-            name: {
-              color: LABEL_COLOR,
-              fontSize: 11,
-              fontWeight: 600,
-              width: LEGEND_WIDTH,
-              overflow: 'truncate',
-              lineHeight: 16,
-              padding: [2, 6, 2, 6],
-              borderRadius: 6,
-              backgroundColor: 'rgba(79, 124, 255, 0)',
-            },
-            nameActive: {
-              color: '#13315c',
-              fontSize: 11,
-              fontWeight: 700,
-              width: LEGEND_WIDTH,
-              overflow: 'truncate',
-              lineHeight: 16,
-              padding: [2, 6, 2, 6],
-              borderRadius: 6,
-              backgroundColor: 'rgba(79, 124, 255, 0.14)',
-            },
-            nameDim: {
-              color: '#8fa0b8',
-              fontSize: 11,
-              fontWeight: 500,
-              width: LEGEND_WIDTH,
-              overflow: 'truncate',
-              lineHeight: 16,
-              padding: [2, 6, 2, 6],
-              borderRadius: 6,
-              backgroundColor: 'rgba(79, 124, 255, 0)',
-            },
-            meta: {
-              color: MUTED_COLOR,
-              fontFamily: MONO_FAMILY,
-              fontSize: 10,
-              lineHeight: 14,
-              padding: [1, 6, 1, 6],
-              borderRadius: 6,
-              backgroundColor: 'rgba(79, 124, 255, 0)',
-            },
-            metaActive: {
-              color: '#31598f',
-              fontFamily: MONO_FAMILY,
-              fontSize: 10,
-              fontWeight: 600,
-              lineHeight: 14,
-              padding: [1, 6, 1, 6],
-              borderRadius: 6,
-              backgroundColor: 'rgba(79, 124, 255, 0.1)',
-            },
-            metaDim: {
-              color: '#9aabc1',
-              fontFamily: MONO_FAMILY,
-              fontSize: 10,
-              lineHeight: 14,
-              padding: [1, 6, 1, 6],
-              borderRadius: 6,
-              backgroundColor: 'rgba(79, 124, 255, 0)',
-            },
-          },
-        },
-      },
       series: [
         {
           name: props.title,
           type: 'pie',
-          radius: ['50%', '68%'],
-          center: [PIE_CENTER_X, '48%'],
+          radius: ['56%', '76%'],
+          center: [PIE_CENTER_X, '50%'],
           avoidLabelOverlap: true,
           label: { show: false },
           labelLine: { show: false },
@@ -225,7 +127,6 @@ export function DonutChart(props: {
     props.filterKind,
     props.title,
     props.totalLabel,
-    sliceByLabel,
   ])
 
   if (displaySlices.length === 0) {
@@ -453,14 +354,6 @@ function escapeHtml(value: string) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-}
-
-function truncateLabel(value: string, maxLength: number) {
-  if (value.length <= maxLength) {
-    return value
-  }
-
-  return `${value.slice(0, Math.max(maxLength - 1, 1))}…`
 }
 
 function collapseSlices(slices: DonutSlice[], keepTopN: number) {
