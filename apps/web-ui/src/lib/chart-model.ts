@@ -8,6 +8,7 @@ import type {
 } from '../api'
 
 const DAY_SECONDS = 24 * 60 * 60
+const MERGE_GAP_SECONDS = 60
 const APP_PRESET_COLORS: string[] = [
   '#2563eb',
   '#dc2626',
@@ -260,7 +261,7 @@ function toFocusChartSegments(
     })
   }
 
-  return results
+  return mergeAdjacentFocusSegments(results)
 }
 
 function toBrowserChartSegments(
@@ -320,6 +321,50 @@ function toPresenceChartSegments(
   }
 
   return results
+}
+
+function mergeAdjacentFocusSegments(segments: ChartSegment[]) {
+  if (segments.length <= 1) {
+    return segments
+  }
+
+  const ordered = [...segments].sort((left, right) => {
+    if (left.startSec !== right.startSec) {
+      return left.startSec - right.startSec
+    }
+
+    return left.endSec - right.endSec
+  })
+  const merged: ChartSegment[] = []
+
+  for (const segment of ordered) {
+    const previous = merged[merged.length - 1]
+    if (
+      previous &&
+      previous.tone === 'focus' &&
+      segment.tone === 'focus' &&
+      previous.key === segment.key &&
+      previous.isBrowser === segment.isBrowser &&
+      segment.startSec - previous.endSec <= MERGE_GAP_SECONDS
+    ) {
+      const nextEndSec = Math.max(previous.endSec, segment.endSec)
+      merged[merged.length - 1] = {
+        ...previous,
+        id: `focus-merged-${previous.key}-${previous.startSec}-${nextEndSec}`,
+        endSec: nextEndSec,
+        durationSec: nextEndSec - previous.startSec,
+        detail:
+          previous.detail === segment.detail
+            ? previous.detail
+            : previous.key,
+      }
+      continue
+    }
+
+    merged.push(segment)
+  }
+
+  return merged
 }
 
 function buildActiveIntervals(
