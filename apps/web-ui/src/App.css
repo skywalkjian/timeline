@@ -353,6 +353,11 @@
   min-height: 430px;
 }
 
+.showcase-card-dashboard .weekly-chart-shell {
+  flex: 1;
+  min-height: 0;
+}
+
 .stats-analysis-card,
 .stats-calendar-card {
   min-height: 372px;
@@ -495,12 +500,12 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
-  align-items: end;
+  align-items: stretch;
 }
 
 .weekly-chart-main {
   position: relative;
-  min-height: 192px;
+  min-height: 248px;
   padding-top: 8px;
 }
 
@@ -519,14 +524,14 @@
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
-  min-height: 184px;
+  min-height: 236px;
 }
 
 .weekly-axis {
   display: grid;
   align-content: space-between;
   justify-items: start;
-  min-height: 184px;
+  min-height: 236px;
   padding-bottom: 22px;
 }
 
@@ -559,7 +564,7 @@
   position: relative;
   width: 100%;
   max-width: 34px;
-  height: 148px;
+  height: 196px;
   border-radius: 18px;
   background: rgba(83, 93, 110, 0.18);
   overflow: hidden;
