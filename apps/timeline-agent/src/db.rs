@@ -135,23 +135,30 @@ impl AgentStore {
         Ok(store)
     }
 
+    /// Closes all segments left open from a previous session by setting `ended_at`
+    /// to `last_seen_at` (or `started_at` as fallback). Runs in a transaction so that
+    /// all three tables are updated atomically — a partial failure won't leave
+    /// inconsistent state across segment types.
     pub async fn restore_unclosed_segments(&self) -> Result<()> {
+        let mut tx = self.pool.begin().await.context("failed to begin transaction")?;
+
         sqlx::query(
             "UPDATE focus_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
         )
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query(
             "UPDATE browser_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
         )
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query(
             "UPDATE presence_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
         )
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
 
+        tx.commit().await.context("failed to commit restore_unclosed_segments")?;
         Ok(())
     }
 
@@ -414,20 +421,13 @@ ORDER BY started_at ASC
 
         let mut focus_segments = Vec::new();
         for row in focus_rows {
-            let started_at = parse_time(row.get::<String, _>("started_at").as_str())?;
-            let ended_at = match row.get::<Option<String>, _>("ended_at") {
-                Some(value) => Some(parse_time(&value)?),
-                None => None,
-            };
+            let (started_at, ended_at) =
+                parse_segment_bounds(&row, now_utc, day_start_utc, day_end_utc)?;
 
             focus_segments.push(FocusSegment {
                 id: row.get("id"),
-                started_at: clamp_start(started_at, day_start_utc),
-                ended_at: Some(clamp_end(
-                    ended_at.unwrap_or(now_utc),
-                    day_end_utc,
-                    day_start_utc,
-                )),
+                started_at,
+                ended_at: Some(ended_at),
                 app: AppInfo {
                     process_name: row.get("process_name"),
                     display_name: row.get("display_name"),
@@ -440,11 +440,8 @@ ORDER BY started_at ASC
 
         let mut browser_segments = Vec::new();
         for row in browser_rows {
-            let started_at = parse_time(row.get::<String, _>("started_at").as_str())?;
-            let ended_at = match row.get::<Option<String>, _>("ended_at") {
-                Some(value) => Some(parse_time(&value)?),
-                None => None,
-            };
+            let (started_at, ended_at) =
+                parse_segment_bounds(&row, now_utc, day_start_utc, day_end_utc)?;
 
             browser_segments.push(BrowserSegment {
                 id: row.get("id"),
@@ -452,32 +449,21 @@ ORDER BY started_at ASC
                 page_title: row.get("page_title"),
                 browser_window_id: row.get("browser_window_id"),
                 tab_id: row.get("tab_id"),
-                started_at: clamp_start(started_at, day_start_utc),
-                ended_at: Some(clamp_end(
-                    ended_at.unwrap_or(now_utc),
-                    day_end_utc,
-                    day_start_utc,
-                )),
+                started_at,
+                ended_at: Some(ended_at),
             });
         }
 
         let mut presence_segments = Vec::new();
         for row in presence_rows {
-            let started_at = parse_time(row.get::<String, _>("started_at").as_str())?;
-            let ended_at = match row.get::<Option<String>, _>("ended_at") {
-                Some(value) => Some(parse_time(&value)?),
-                None => None,
-            };
+            let (started_at, ended_at) =
+                parse_segment_bounds(&row, now_utc, day_start_utc, day_end_utc)?;
 
             presence_segments.push(PresenceSegment {
                 id: row.get("id"),
                 state: parse_presence_state(row.get::<String, _>("state").as_str())?,
-                started_at: clamp_start(started_at, day_start_utc),
-                ended_at: Some(clamp_end(
-                    ended_at.unwrap_or(now_utc),
-                    day_end_utc,
-                    day_start_utc,
-                )),
+                started_at,
+                ended_at: Some(ended_at),
             });
         }
 
@@ -630,6 +616,26 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     }
 }
 
+/// Parses `started_at`/`ended_at` from a database row and clamps both timestamps
+/// to the queried day boundaries. Open segments (NULL `ended_at`) use `now_utc`
+/// as a stand-in so the frontend sees them extending to the current moment.
+fn parse_segment_bounds(
+    row: &sqlx::sqlite::SqliteRow,
+    now_utc: OffsetDateTime,
+    day_start: OffsetDateTime,
+    day_end: OffsetDateTime,
+) -> Result<(OffsetDateTime, OffsetDateTime)> {
+    let started_at = parse_time(row.get::<String, _>("started_at").as_str())?;
+    let ended_at = match row.get::<Option<String>, _>("ended_at") {
+        Some(value) => parse_time(&value)?,
+        None => now_utc,
+    };
+
+    Ok((clamp_start(started_at, day_start), clamp_end(ended_at, day_end, day_start)))
+}
+
+/// Converts a local-time `Date` + `UtcOffset` into a pair of UTC timestamps
+/// representing [midnight, next midnight) for that local day.
 fn day_bounds(date: Date, timezone: UtcOffset) -> Result<(OffsetDateTime, OffsetDateTime)> {
     let start_local = PrimitiveDateTime::new(date, time::Time::MIDNIGHT).assume_offset(timezone);
     let end_local = start_local + Duration::days(1);
@@ -639,10 +645,13 @@ fn day_bounds(date: Date, timezone: UtcOffset) -> Result<(OffsetDateTime, Offset
     ))
 }
 
+/// Clamps a segment's start time so it doesn't appear before the queried day boundary.
 fn clamp_start(value: OffsetDateTime, min: OffsetDateTime) -> OffsetDateTime {
     if value < min { min } else { value }
 }
 
+/// Clamps a segment's end time to [min, max]. The `min` guard ensures that
+/// segments starting before midnight don't produce negative durations after clamping.
 fn clamp_end(value: OffsetDateTime, max: OffsetDateTime, min: OffsetDateTime) -> OffsetDateTime {
     let upper = if value > max { max } else { value };
     if upper < min { min } else { upper }
@@ -673,6 +682,8 @@ fn presence_label(value: &PresenceState) -> &'static str {
     }
 }
 
+/// Computes the duration in seconds for a segment, returning 0 for open segments
+/// or if timestamps are inverted (which can happen with clamping edge cases).
 fn segment_seconds_focus(segment: &FocusSegment) -> i64 {
     segment
         .ended_at

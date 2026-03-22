@@ -391,6 +391,15 @@ function toRange(
   return { startSec, endSec }
 }
 
+/**
+ * Converts a UTC ISO timestamp to seconds-since-local-midnight for chart positioning.
+ *
+ * Steps:
+ *   1. Parse the UTC timestamp via `new Date()`.
+ *   2. Shift it by the timeline's UTC offset to get local wall-clock time.
+ *   3. If the shifted date falls before/after the query date, clamp to 0 or DAY_SECONDS.
+ *   4. Otherwise extract HH:MM:SS as seconds since midnight.
+ */
 function toSecondsSinceMidnight(value: string, timeContext: TimelineTimeContext) {
   const date = new Date(value)
   const shifted = new Date(date.getTime() + parseUtcOffsetMillis(timeContext.timezone))
@@ -412,6 +421,7 @@ function toSecondsSinceMidnight(value: string, timeContext: TimelineTimeContext)
   return Math.max(0, Math.min(seconds, DAY_SECONDS))
 }
 
+/** Parses a timezone string like "+08:00" or "-05:30" into milliseconds offset from UTC. */
 function parseUtcOffsetMillis(value: string) {
   const match = value.match(/^([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/)
   if (!match) {

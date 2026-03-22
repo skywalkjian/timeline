@@ -29,10 +29,10 @@ impl Default for AppConfig {
         Self {
             database_path: PathBuf::from("data/timeline.sqlite"),
             lockfile_path: PathBuf::from("data/timeline-agent.lock"),
-            listen_addr: "127.0.0.1:46215".to_string(),
+            listen_addr: "127.0.0.1:46215".to_string(), // port chosen to avoid common conflicts
             web_ui_url: "http://127.0.0.1:46215/#/stats".to_string(),
-            idle_threshold_secs: 300,
-            poll_interval_millis: 1_000,
+            idle_threshold_secs: 300, // 5 minutes — standard idle detection threshold
+            poll_interval_millis: 1_000, // 1 second — balances responsiveness vs CPU cost
             debug: true,
             tray_enabled: true,
             record_window_titles: true,
@@ -91,6 +91,14 @@ impl AppConfig {
         self.web_ui_url.clone()
     }
 
+    /// Searches common locations for the built web-ui `dist/` directory.
+    ///
+    /// Priority order:
+    ///   1. Paths relative to CWD (`apps/web-ui/dist`, `web-ui/dist`, `dist`).
+    ///   2. Paths relative to the running executable and its parent directories.
+    ///
+    /// Returns the first candidate containing `index.html`, or `None` if the
+    /// frontend hasn't been built yet.
     pub fn web_ui_dist_dir(&self) -> Option<PathBuf> {
         let mut candidates = vec![
             PathBuf::from("apps/web-ui/dist"),
@@ -134,6 +142,9 @@ impl AppConfig {
     }
 }
 
+/// Normalizes a listen address host for use in self-hosted URLs.
+/// Strips IPv6 brackets, maps wildcard addresses (`0.0.0.0`, `::`) to `127.0.0.1`,
+/// and re-wraps bare IPv6 addresses in brackets for URL formatting.
 fn normalize_host(host: &str) -> String {
     let trimmed = host.trim().trim_start_matches('[').trim_end_matches(']');
     let normalized = match trimmed {

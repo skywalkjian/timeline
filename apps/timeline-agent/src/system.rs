@@ -80,6 +80,7 @@ pub fn open_frontend(url: &str) -> Result<()> {
         )
     };
 
+    // ShellExecuteW returns a pseudo-HINSTANCE; values <= 32 indicate failure.
     if result.0 as usize <= 32 {
         anyhow::bail!("ShellExecuteW failed with code {}", result.0 as usize);
     }
@@ -143,6 +144,7 @@ fn run_tray_loop(state: AgentState) -> Result<()> {
 
     let state_for_loop = state.clone();
     event_loop.run(move |event, _, control_flow| {
+        // Poll at 250ms to keep tray responsive while avoiding excessive CPU usage.
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
 
         if state_for_loop.shutdown_requested() {
@@ -194,9 +196,31 @@ fn build_tray_menu() -> Menu {
     menu
 }
 
+/// Builds a 32×32 RGBA tray icon procedurally.
+///
+/// The icon depicts a stylized "T" (for Timeline) on a blue background:
+///
+/// ```text
+///   ┌──────────────────────────┐  ← dark border (2px, #0e1726)
+///   │  blue background #1c5ac4 │
+///   │     ┌───────────────┐    │
+///   │     │  white T-bar  │    │  ← horizontal bar (x 8..23, y 7..10)
+///   │     └───┬───┬───────┘    │
+///   │         │   │            │
+///   │         │ T │            │  ← vertical stem (x 14..17, y 6..25)
+///   │         │   │            │
+///   │         └───┘   ■■■■■   │  ← accent square (x 20..24, y 20..24, #568eff)
+///   └──────────────────────────┘
+/// ```
 fn build_tray_icon() -> Result<Icon> {
     const SIZE: u32 = 32;
     let mut rgba = vec![0u8; (SIZE * SIZE * 4) as usize];
+
+    // Color constants for the icon layers
+    const BORDER: (u8, u8, u8, u8) = (14, 23, 38, 255); // dark navy border
+    const BACKGROUND: (u8, u8, u8, u8) = (28, 90, 196, 255); // blue fill
+    const GLYPH: (u8, u8, u8, u8) = (255, 255, 255, 255); // white "T" letter
+    const ACCENT: (u8, u8, u8, u8) = (86, 142, 255, 255); // lighter blue dot
 
     for y in 0..SIZE {
         for x in 0..SIZE {
@@ -207,13 +231,13 @@ fn build_tray_icon() -> Result<Icon> {
             let is_highlight = (20..=24).contains(&x) && (20..=24).contains(&y);
 
             let (r, g, b, a) = if is_border {
-                (14, 23, 38, 255)
+                BORDER
             } else if is_vertical || is_horizontal {
-                (255, 255, 255, 255)
+                GLYPH
             } else if is_highlight {
-                (86, 142, 255, 255)
+                ACCENT
             } else {
-                (28, 90, 196, 255)
+                BACKGROUND
             };
 
             rgba[offset] = r;

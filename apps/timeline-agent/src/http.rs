@@ -21,6 +21,11 @@ use time::{Date, Duration, OffsetDateTime};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
+const EXTENSION_HEADER: &str = "x-timeline-extension";
+const EXTENSION_HEADER_VALUE: &str = "browser-bridge";
+/// How many raw events to return in the debug endpoint.
+const DEBUG_RECENT_EVENTS_LIMIT: i64 = 30;
+
 pub fn build_router(state: AgentState) -> Router {
     let router = Router::new()
         .route("/health", get(get_health))
@@ -115,7 +120,7 @@ async fn get_focus_stats(
 async fn get_recent_events(
     State(state): State<AgentState>,
 ) -> Result<Json<ApiResponse<Vec<common::DebugEvent>>>, AppError> {
-    let events = state.store().read_recent_events(30).await?;
+    let events = state.store().read_recent_events(DEBUG_RECENT_EVENTS_LIMIT).await?;
     Ok(Json(ApiResponse::ok(events)))
 }
 
@@ -202,9 +207,9 @@ fn is_allowed_browser_origin(origin: &HeaderValue, headers: &axum::http::HeaderM
         .is_some_and(|value| value.starts_with("chrome-extension://"))
     {
         return headers
-            .get("x-timeline-extension")
+            .get(EXTENSION_HEADER)
             .and_then(|value| value.to_str().ok())
-            == Some("browser-bridge");
+            == Some(EXTENSION_HEADER_VALUE);
     }
 
     false
@@ -229,6 +234,8 @@ fn is_allowed_loopback_origin(origin: &HeaderValue) -> bool {
     matches!(host, Some("127.0.0.1" | "localhost" | "::1"))
 }
 
+/// Extracts the host portion from an authority string, stripping the port
+/// and IPv6 brackets (e.g. `[::1]:5173` → `::1`, `127.0.0.1:46215` → `127.0.0.1`).
 fn extract_host(authority: &str) -> Option<&str> {
     if let Some(remainder) = authority.strip_prefix('[') {
         return remainder.split_once(']').map(|(host, _)| host);
@@ -249,7 +256,9 @@ async fn frontend_not_built() -> impl IntoResponse {
 async fn build_monitor_statuses(state: &AgentState) -> Vec<AgentMonitorStatus> {
     let now = OffsetDateTime::now_utc();
     let telemetry = state.monitor_snapshot().await;
+    // Focus/presence trackers are stale if no heartbeat arrives within 4 poll intervals.
     let poll_window = Duration::milliseconds((state.config().poll_interval_millis * 4) as i64);
+    // Browser extension events are sporadic; allow up to 15 minutes before marking stale.
     let browser_window = Duration::minutes(15);
 
     vec![

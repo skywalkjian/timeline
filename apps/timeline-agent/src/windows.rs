@@ -97,6 +97,10 @@ pub fn detect_presence(idle_threshold: Duration) -> Result<PresenceState> {
     }
 }
 
+/// Reads how long since the last keyboard/mouse input using Win32 tick counts.
+/// `GetLastInputInfo` returns the tick count (ms since boot) of the last input event;
+/// we subtract it from the current tick count to get the idle duration.
+/// `saturating_sub` prevents underflow if the tick counter wraps (>584 billion ms / ~185 years).
 fn read_idle_duration() -> Result<Duration> {
     let mut last_input_info = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
@@ -164,6 +168,9 @@ fn read_session_id(process_id: u32) -> Result<u32> {
     Ok(session_id)
 }
 
+/// Detects whether the Windows workstation is locked by checking the name of
+/// the active input desktop. When the machine is locked, Windows switches to the
+/// "Winlogon" desktop; the normal interactive desktop is named "Default".
 fn is_workstation_locked() -> Result<bool> {
     let desktop = unsafe {
         OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_READOBJECTS)
@@ -206,6 +213,9 @@ fn is_browser_process(process_name: &str) -> bool {
     )
 }
 
+/// RAII wrapper that closes a Win32 HANDLE on drop.
+/// Close errors are intentionally ignored — the handle may already be invalid,
+/// and there's no meaningful recovery action during cleanup.
 struct HandleGuard(windows::Win32::Foundation::HANDLE);
 
 impl Drop for HandleGuard {
@@ -216,6 +226,7 @@ impl Drop for HandleGuard {
     }
 }
 
+/// RAII wrapper that closes a Win32 desktop handle on drop (same rationale as HandleGuard).
 struct DesktopGuard(HDESK);
 
 impl Drop for DesktopGuard {

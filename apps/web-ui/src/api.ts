@@ -88,10 +88,18 @@ type ApiEnvelope<T> = {
   } | null
 }
 
+/** Resolves the agent API base URL.
+ *  - In production (self-hosted mode), the frontend is served by the agent itself, so
+ *    `window.location.origin` points to the correct address.
+ *  - During development, Vite runs on ports 4173 (preview) or 5173 (dev), so we
+ *    redirect API calls to the agent's default port 46215.
+ *  - The `VITE_API_BASE_URL` env var provides a manual override for either case.
+ */
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   (isLocalDevServer() ? 'http://127.0.0.1:46215' : window.location.origin)
 
+/** Returns true when running inside the Vite dev/preview server (ports 4173/5173). */
 function isLocalDevServer() {
   return (
     typeof window !== 'undefined' &&

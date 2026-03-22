@@ -53,6 +53,7 @@ type DragState = {
 }
 
 const DAY_SECONDS = 24 * 60 * 60
+/** Viewport positions snap to 5-minute boundaries for a cleaner user experience. */
 const SNAP_SECONDS = 5 * 60
 
 export function TimelineChart(props: {
@@ -488,6 +489,12 @@ function buildRows(rows: TimelineRow[]): RowLayout[] {
   })
 }
 
+/**
+ * Packs segments into the minimum number of non-overlapping lanes using a
+ * greedy left-to-right algorithm: sort by start time, then place each segment
+ * into the first lane whose last segment ends before this one starts.
+ * If no lane fits, create a new one.
+ */
 function buildLanes(segments: ChartSegment[]) {
   const lanes: ChartSegment[][] = []
   const ordered = [...segments].sort((left, right) => {
@@ -546,6 +553,8 @@ function buildOverviewSegments(rows: RowLayout[]): OverviewSegment[] {
         id: `${segment.id}-overview`,
         leftPct: (segment.startSec / DAY_SECONDS) * 100,
         widthPct: Math.max((segment.durationSec / DAY_SECONDS) * 100, 0.2),
+        // Distribute rows vertically within the overview bar. The +6 top offset
+        // and 18% base height keep segments visually centered in the panel.
         topPct: ((rowIndex + laneIndex / Math.max(row.lanes.length, 1)) / totalRows) * 100 + 6,
         heightPct: 18 / totalRows,
         color: segment.color,
@@ -715,20 +724,21 @@ function clampWindow(startSec: number, endSec: number, duration: number) {
   }
 }
 
+/** Picks a tick interval that yields ~4-8 visible ticks for the given duration. */
 function chooseTickStep(duration: number) {
-  if (duration <= 15 * 60) {
+  if (duration <= 15 * 60) {        // ≤15min → tick every 1 min
     return 60
   }
-  if (duration <= 60 * 60) {
+  if (duration <= 60 * 60) {        // ≤1h → tick every 5 min
     return 5 * 60
   }
-  if (duration <= 2 * 60 * 60) {
+  if (duration <= 2 * 60 * 60) {    // ≤2h → tick every 15 min
     return 15 * 60
   }
-  if (duration <= 8 * 60 * 60) {
+  if (duration <= 8 * 60 * 60) {    // ≤8h → tick every 1h
     return 60 * 60
   }
-  return 2 * 60 * 60
+  return 2 * 60 * 60               // >8h → tick every 2h
 }
 
 function formatTickLabel(seconds: number, duration: number) {

@@ -24,6 +24,7 @@ export function DonutChart(props: {
   filterKind: 'app' | 'domain'
   onSelect: (filter: DashboardFilter) => void
 }) {
+  /** Show at most 5 slices in the legend; group the rest as "Others". */
   const displaySlices = useMemo(() => collapseSlices(props.slices, 5), [props.slices])
   const sliceByLabel = useMemo(
     () => new Map(displaySlices.map((slice) => [slice.label, slice])),

@@ -61,6 +61,15 @@ async fn run_presence_tracker(state: AgentState) -> Result<()> {
     }
 }
 
+/// Reconciles in-memory focus state with the latest foreground window snapshot.
+///
+/// State machine transitions:
+///   1. Same app (fingerprint unchanged) → touch the existing segment's `last_seen_at`.
+///   2. Different app or no window → close the previous focus segment.
+///      - If the new app is NOT a browser (or there's no window), also close the
+///        active browser segment, since browser domains are only meaningful while
+///        a browser is in the foreground.
+///   3. Open a new focus segment for the incoming app (unless it's ignored).
 async fn sync_focus_snapshot(
     state: &AgentState,
     snapshot: Option<ForegroundWindowSnapshot>,
@@ -95,6 +104,9 @@ async fn sync_focus_snapshot(
             .await?;
     }
 
+    // If the new foreground app is NOT a browser (or no window is focused),
+    // close the active browser segment — domain tracking is only valid while
+    // a browser is in the foreground.
     let leaving_browser = snapshot
         .as_ref()
         .map(|value| !value.is_browser)
@@ -192,6 +204,13 @@ async fn sync_presence_state(
     Ok(())
 }
 
+/// Processes an incoming browser extension event.
+///
+/// Decision tree:
+///   1. Domain is in `ignored_domains` → close current browser segment, reject.
+///   2. No browser is the foreground app → close current browser segment, reject.
+///   3. Same domain + window + tab as current → touch `last_seen_at`, accept.
+///   4. Different domain/tab → close previous browser segment, open new one, accept.
 pub async fn sync_browser_event(
     state: &AgentState,
     payload: common::BrowserEventPayload,
