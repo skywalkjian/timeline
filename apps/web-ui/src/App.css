@@ -1251,6 +1251,7 @@
 
 .timeline-devtools {
   --timeline-label-width: 176px;
+  --timeline-marker-color: rgba(42, 93, 189, 0.72);
   border: 1px solid rgba(145, 159, 180, 0.18);
   border-radius: 16px;
   background:
@@ -1433,7 +1434,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  border-left: 1px solid rgba(42, 93, 189, 0.72);
+  border-left: 1px solid var(--timeline-marker-color);
 }
 
 .timeline-inspector-axis-marker span {
@@ -1555,7 +1556,7 @@
 }
 
 .timeline-overview-panel {
-  padding: 8px 14px 12px;
+  padding: 8px 14px 30px;
   border-top: 1px solid rgba(145, 159, 180, 0.12);
   background:
     linear-gradient(180deg, rgba(250, 252, 255, 0.96), rgba(246, 249, 255, 0.98));
@@ -1579,8 +1580,9 @@
   border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(244, 247, 252, 0.98), rgba(239, 244, 250, 0.96));
-  overflow: hidden;
+  overflow: visible;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  cursor: pointer;
 }
 
 .timeline-overview-grid {
@@ -1598,43 +1600,125 @@
 
 .timeline-overview-window {
   position: absolute;
-  top: 7px;
-  bottom: 7px;
-  border: 1px solid rgba(65, 112, 201, 0.22);
-  border-radius: 12px;
-  background: rgba(79, 124, 255, 0.14);
+  top: 4px;
+  bottom: 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   display: grid;
-  grid-template-columns: 12px 1fr 12px;
+  grid-template-columns: 20px 1fr 20px;
   align-items: stretch;
-  min-width: 18px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.38),
-    0 4px 12px rgba(52, 88, 155, 0.08);
+  min-width: 76px;
+  cursor: grab;
 }
 
-.timeline-overview-window-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  color: #24406e;
-  font-family: var(--mono-family);
-  font-size: 0.68rem;
-  white-space: nowrap;
+.timeline-overview-window:active {
+  cursor: grabbing;
+}
+
+.timeline-overview-window-body {
+  position: relative;
+}
+
+.timeline-overview-window-body::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 0.5px;
+  background: color-mix(in srgb, var(--timeline-marker-color) 20%, transparent);
+  transform: translateY(-50%);
 }
 
 .timeline-overview-handle {
   border: none;
-  background: rgba(235, 240, 249, 0.92);
+  position: relative;
+  background: transparent;
   cursor: ew-resize;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: visible;
+}
+
+.timeline-overview-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  bottom: 0;
+  width: 0;
+  border-left: 0.5px solid color-mix(in srgb, var(--timeline-marker-color) 92%, transparent);
+  transform: translateX(-50%);
 }
 
 .timeline-overview-handle.is-start {
-  border-radius: 7px 0 0 7px;
+  margin-left: -10px;
 }
 
 .timeline-overview-handle.is-end {
-  border-radius: 0 7px 7px 0;
+  margin-right: -10px;
+}
+
+.timeline-overview-handle.is-start::after,
+.timeline-overview-handle.is-end::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 14px;
+  height: 6px;
+  border: 1px solid rgba(33, 77, 152, 0.28);
+  border-radius: 999px;
+  background: rgba(238, 244, 255, 0.98);
+  transform: translateX(-50%);
+  box-shadow:
+    0 1px 2px rgba(33, 53, 89, 0.08);
+}
+
+.timeline-overview-handle.is-start::after {
+  box-shadow:
+    0 1px 2px rgba(33, 53, 89, 0.08),
+    inset -3px 0 0 rgba(33, 77, 152, 0.14);
+}
+
+.timeline-overview-handle.is-end::after {
+  box-shadow:
+    0 1px 2px rgba(33, 53, 89, 0.08),
+    inset 3px 0 0 rgba(33, 77, 152, 0.14);
+}
+
+.timeline-overview-handle-time {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 18px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(33, 77, 152, 0.9);
+  color: #fff;
+  font-family: var(--mono-family);
+  font-size: 0.66rem;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(33, 53, 89, 0.12);
+  transform: translateX(6px);
+}
+
+.timeline-overview-handle.is-start .timeline-overview-handle-time {
+  transform: translateX(6px);
+}
+
+.timeline-overview-handle.is-end .timeline-overview-handle-time {
+  transform: translateX(6px);
 }
 
 .timeline-table {

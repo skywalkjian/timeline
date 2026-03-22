@@ -398,10 +398,12 @@ export function TimelineChart(props: {
                 onPointerDown={(event) =>
                   beginOverviewDrag(event, 'resize-start', props, dragStateRef)
                 }
-              />
-              <div className="timeline-overview-window-label">
-                {formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}
-              </div>
+              >
+                <span className="timeline-overview-handle-time">
+                  {formatClock(props.viewStartSec)}
+                </span>
+              </button>
+              <div className="timeline-overview-window-body" aria-hidden="true" />
               <button
                 type="button"
                 className="timeline-overview-handle is-end"
@@ -409,7 +411,11 @@ export function TimelineChart(props: {
                 onPointerDown={(event) =>
                   beginOverviewDrag(event, 'resize-end', props, dragStateRef)
                 }
-              />
+              >
+                <span className="timeline-overview-handle-time">
+                  {formatClock(props.viewEndSec)}
+                </span>
+              </button>
             </div>
           </div>
         </div>
