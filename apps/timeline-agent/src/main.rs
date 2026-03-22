@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
     let started_at = OffsetDateTime::now_utc();
     let _lock = acquire_instance_lock(&config.lockfile_path)?;
     let store = AgentStore::connect(&config).await?;
-    store.restore_unclosed_segments(started_at).await?;
+    store.restore_unclosed_segments().await?;
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     let state = AgentState::new(

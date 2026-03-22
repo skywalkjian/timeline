@@ -79,6 +79,12 @@ async fn sync_focus_snapshot(
         })
         .unwrap_or(false);
     if same_as_current {
+        if let Some(current) = runtime.current_focus.as_ref() {
+            state
+                .store()
+                .touch_focus_segment(current.id, observed_at)
+                .await?;
+        }
         return Ok(());
     }
 
@@ -153,6 +159,12 @@ async fn sync_presence_state(
         .map(|current| current.state == presence)
         .unwrap_or(false);
     if same_as_current {
+        if let Some(current) = runtime.current_presence.as_ref() {
+            state
+                .store()
+                .touch_presence_segment(current.id, observed_at)
+                .await?;
+        }
         return Ok(());
     }
 
@@ -236,6 +248,12 @@ pub async fn sync_browser_event(
             && current.tab_id == payload.tab_id
     });
     if same_segment.unwrap_or(false) {
+        if let Some(current) = runtime.current_browser.as_ref() {
+            state
+                .store()
+                .touch_browser_segment(current.id, observed_at)
+                .await?;
+        }
         return Ok(common::BrowserEventAck {
             accepted: true,
             reason: None,

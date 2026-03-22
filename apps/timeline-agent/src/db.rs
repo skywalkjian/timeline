@@ -91,6 +91,27 @@ CREATE INDEX IF NOT EXISTS idx_presence_segments_started_at ON presence_segments
 CREATE INDEX IF NOT EXISTS idx_raw_events_observed_at ON raw_events(observed_at);
 "#,
     },
+    Migration {
+        version: 3,
+        name: "add_last_seen_columns",
+        sql: r#"
+ALTER TABLE focus_segments ADD COLUMN last_seen_at TEXT;
+ALTER TABLE browser_segments ADD COLUMN last_seen_at TEXT;
+ALTER TABLE presence_segments ADD COLUMN last_seen_at TEXT;
+
+UPDATE focus_segments
+SET last_seen_at = COALESCE(ended_at, started_at)
+WHERE last_seen_at IS NULL;
+
+UPDATE browser_segments
+SET last_seen_at = COALESCE(ended_at, started_at)
+WHERE last_seen_at IS NULL;
+
+UPDATE presence_segments
+SET last_seen_at = COALESCE(ended_at, started_at)
+WHERE last_seen_at IS NULL;
+"#,
+    },
 ];
 
 impl AgentStore {
@@ -114,18 +135,20 @@ impl AgentStore {
         Ok(store)
     }
 
-    pub async fn restore_unclosed_segments(&self, closed_at: OffsetDateTime) -> Result<()> {
-        let closed_at = format_time(closed_at)?;
-        sqlx::query("UPDATE focus_segments SET ended_at = ? WHERE ended_at IS NULL")
-            .bind(&closed_at)
+    pub async fn restore_unclosed_segments(&self) -> Result<()> {
+        sqlx::query(
+            "UPDATE focus_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
+        )
             .execute(&self.pool)
             .await?;
-        sqlx::query("UPDATE browser_segments SET ended_at = ? WHERE ended_at IS NULL")
-            .bind(&closed_at)
+        sqlx::query(
+            "UPDATE browser_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
+        )
             .execute(&self.pool)
             .await?;
-        sqlx::query("UPDATE presence_segments SET ended_at = ? WHERE ended_at IS NULL")
-            .bind(&closed_at)
+        sqlx::query(
+            "UPDATE presence_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
+        )
             .execute(&self.pool)
             .await?;
 
@@ -173,9 +196,10 @@ INSERT INTO focus_segments (
   window_title,
   is_browser,
   started_at,
+  last_seen_at,
   created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&app.process_name)
@@ -183,6 +207,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
         .bind(&app.exe_path)
         .bind(&app.window_title)
         .bind(if app.is_browser { 1 } else { 0 })
+        .bind(&observed_at)
         .bind(&observed_at)
         .bind(&observed_at)
         .execute(&self.pool)
@@ -193,7 +218,18 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 
     pub async fn end_focus_segment(&self, id: i64, observed_at: OffsetDateTime) -> Result<()> {
         let observed_at = format_time(observed_at)?;
-        sqlx::query("UPDATE focus_segments SET ended_at = ? WHERE id = ?")
+        sqlx::query("UPDATE focus_segments SET last_seen_at = ?, ended_at = ? WHERE id = ?")
+            .bind(&observed_at)
+            .bind(&observed_at)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn touch_focus_segment(&self, id: i64, observed_at: OffsetDateTime) -> Result<()> {
+        let observed_at = format_time(observed_at)?;
+        sqlx::query("UPDATE focus_segments SET last_seen_at = ? WHERE id = ? AND ended_at IS NULL")
             .bind(observed_at)
             .bind(id)
             .execute(&self.pool)
@@ -208,9 +244,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
     ) -> Result<i64> {
         let observed_at = format_time(observed_at)?;
         let result = sqlx::query(
-            "INSERT INTO presence_segments (state, started_at, created_at) VALUES (?, ?, ?)",
+            "INSERT INTO presence_segments (state, started_at, last_seen_at, created_at) VALUES (?, ?, ?, ?)",
         )
         .bind(presence_label(&state))
+        .bind(&observed_at)
         .bind(&observed_at)
         .bind(&observed_at)
         .execute(&self.pool)
@@ -221,11 +258,24 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 
     pub async fn end_presence_segment(&self, id: i64, observed_at: OffsetDateTime) -> Result<()> {
         let observed_at = format_time(observed_at)?;
-        sqlx::query("UPDATE presence_segments SET ended_at = ? WHERE id = ?")
-            .bind(observed_at)
+        sqlx::query("UPDATE presence_segments SET last_seen_at = ?, ended_at = ? WHERE id = ?")
+            .bind(&observed_at)
+            .bind(&observed_at)
             .bind(id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn touch_presence_segment(&self, id: i64, observed_at: OffsetDateTime) -> Result<()> {
+        let observed_at = format_time(observed_at)?;
+        sqlx::query(
+            "UPDATE presence_segments SET last_seen_at = ? WHERE id = ? AND ended_at IS NULL",
+        )
+        .bind(observed_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -243,15 +293,17 @@ INSERT INTO browser_segments (
   browser_window_id,
   tab_id,
   started_at,
+  last_seen_at,
   created_at
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&payload.domain)
         .bind(&payload.page_title)
         .bind(payload.browser_window_id)
         .bind(payload.tab_id)
+        .bind(&observed_at)
         .bind(&observed_at)
         .bind(&observed_at)
         .execute(&self.pool)
@@ -262,11 +314,24 @@ VALUES (?, ?, ?, ?, ?, ?)
 
     pub async fn end_browser_segment(&self, id: i64, observed_at: OffsetDateTime) -> Result<()> {
         let observed_at = format_time(observed_at)?;
-        sqlx::query("UPDATE browser_segments SET ended_at = ? WHERE id = ?")
-            .bind(observed_at)
+        sqlx::query("UPDATE browser_segments SET last_seen_at = ?, ended_at = ? WHERE id = ?")
+            .bind(&observed_at)
+            .bind(&observed_at)
             .bind(id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn touch_browser_segment(&self, id: i64, observed_at: OffsetDateTime) -> Result<()> {
+        let observed_at = format_time(observed_at)?;
+        sqlx::query(
+            "UPDATE browser_segments SET last_seen_at = ? WHERE id = ? AND ended_at IS NULL",
+        )
+        .bind(observed_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -649,4 +714,59 @@ fn to_duration_stats(
 
     rows.sort_by(|left, right| right.seconds.cmp(&left.seconds));
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AgentStore, AppConfig, parse_time};
+    use common::PresenceState;
+    use sqlx::Row;
+    use std::path::PathBuf;
+    use time::{Duration, OffsetDateTime};
+
+    #[tokio::test]
+    async fn restore_unclosed_segments_uses_last_seen_at_instead_of_restart_time() {
+        let unique = format!(
+            "timeline-agent-test-{}.sqlite",
+            OffsetDateTime::now_utc().unix_timestamp_nanos()
+        );
+        let database_path = std::env::temp_dir().join(unique);
+        let mut config = AppConfig::default();
+        config.database_path = database_path.clone();
+        config.lockfile_path = temp_lock_path(&database_path);
+
+        let store = AgentStore::connect(&config).await.expect("connect store");
+        let started_at =
+            OffsetDateTime::from_unix_timestamp(1_700_000_000).expect("valid timestamp");
+        let last_seen_at = started_at + Duration::seconds(30);
+
+        let id = store
+            .start_presence_segment(PresenceState::Active, started_at)
+            .await
+            .expect("start presence");
+        store
+            .touch_presence_segment(id, last_seen_at)
+            .await
+            .expect("touch presence");
+
+        store
+            .restore_unclosed_segments()
+            .await
+            .expect("restore segments");
+
+        let row = sqlx::query("SELECT ended_at FROM presence_segments WHERE id = ?")
+            .bind(id)
+            .fetch_one(&store.pool)
+            .await
+            .expect("load presence row");
+
+        let ended_at = row.get::<String, _>("ended_at");
+        assert_eq!(parse_time(&ended_at).expect("parse ended_at"), last_seen_at);
+
+        let _ = std::fs::remove_file(database_path);
+    }
+
+    fn temp_lock_path(database_path: &std::path::Path) -> PathBuf {
+        database_path.with_extension("lock")
+    }
 }
