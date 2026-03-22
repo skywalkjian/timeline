@@ -617,6 +617,21 @@ function WeeklyRhythmCard(props: {
   onSelectApp: (value: DashboardFilter) => void
   onSelectDate: (date: string) => void
 }) {
+  const [selectedMetric, setSelectedMetric] = useState<'active' | 'focus'>('active')
+  const selectedBar = props.weekBars.find((bar) => bar.isSelected) ?? props.weekBars[props.weekBars.length - 1]
+  const weekTotal =
+    selectedMetric === 'active'
+      ? props.periodSummary?.week.active_seconds ?? 0
+      : props.periodSummary?.week.focus_seconds ?? 0
+  const monthTotal =
+    selectedMetric === 'active'
+      ? props.periodSummary?.month.active_seconds ?? 0
+      : props.periodSummary?.month.focus_seconds ?? 0
+  const selectedDayValue =
+    selectedMetric === 'active'
+      ? selectedBar?.activeSeconds ?? 0
+      : selectedBar?.focusSeconds ?? 0
+
   return (
     <article className="showcase-card showcase-card-dashboard">
       <div className="showcase-card-head">
@@ -624,21 +639,50 @@ function WeeklyRhythmCard(props: {
           <p className="section-kicker">Dashboard</p>
           <h2>{props.isCurrentDate ? '本周节奏' : '所在周节奏'}</h2>
         </div>
-        <span className="showcase-chip">{props.isCurrentDate ? 'This Week' : 'Selected Week'}</span>
+        <div className="showcase-chip-row">
+          <button
+            type="button"
+            className={`showcase-chip-button ${selectedMetric === 'active' ? 'is-selected' : ''}`}
+            onClick={() => setSelectedMetric('active')}
+          >
+            活跃
+          </button>
+          <button
+            type="button"
+            className={`showcase-chip-button ${selectedMetric === 'focus' ? 'is-selected' : ''}`}
+            onClick={() => setSelectedMetric('focus')}
+          >
+            应用
+          </button>
+        </div>
       </div>
 
       <div className="weekly-summary-row">
         <div>
-          <strong>{formatDuration(props.periodSummary?.week.active_seconds ?? 0)}</strong>
-          <small>活跃总时长</small>
+          <strong>{formatDuration(weekTotal)}</strong>
+          <small>{selectedMetric === 'active' ? '本周活跃' : '本周应用'}</small>
         </div>
         <div>
-          <strong>{formatDuration(props.periodSummary?.month.active_seconds ?? 0)}</strong>
-          <small>当月累计</small>
+          <strong>{formatDuration(monthTotal)}</strong>
+          <small>{selectedMetric === 'active' ? '当月活跃' : '当月应用'}</small>
         </div>
       </div>
 
-      <WeeklyBarChart bars={props.weekBars} onSelectDate={props.onSelectDate} />
+      <WeeklyBarChart
+        bars={props.weekBars}
+        metric={selectedMetric}
+        onSelectDate={props.onSelectDate}
+      />
+
+      {selectedBar ? (
+        <div className="weekly-selection-note">
+          <strong>{selectedBar.dayLabel}</strong>
+          <span>
+            {selectedMetric === 'active' ? '活跃' : '应用'} {formatDuration(selectedDayValue)}
+          </span>
+          <small>点击柱子切换日期</small>
+        </div>
+      ) : null}
 
       <div className="mini-list-card">
         <div className="mini-list-head">
@@ -805,7 +849,11 @@ type WeekBarDatum = {
   isSelected: boolean
 }
 
-function WeeklyBarChart(props: { bars: WeekBarDatum[]; onSelectDate: (date: string) => void }) {
+function WeeklyBarChart(props: {
+  bars: WeekBarDatum[]
+  metric: 'active' | 'focus'
+  onSelectDate: (date: string) => void
+}) {
   const maxFocus = Math.max(...props.bars.map((bar) => bar.focusSeconds), 1)
 
   return (
@@ -813,20 +861,24 @@ function WeeklyBarChart(props: { bars: WeekBarDatum[]; onSelectDate: (date: stri
       {props.bars.map((bar) => {
         const focusHeight = `${Math.max((bar.focusSeconds / maxFocus) * 100, bar.focusSeconds > 0 ? 12 : 0)}%`
         const activeHeight = `${Math.max((bar.activeSeconds / maxFocus) * 100, bar.activeSeconds > 0 ? 10 : 0)}%`
+        const valueLabel = formatDuration(
+          props.metric === 'active' ? bar.activeSeconds : bar.focusSeconds,
+        )
 
         return (
           <button
             key={bar.date}
             type="button"
-            className={`weekly-bar-column ${bar.isSelected ? 'is-selected' : ''}`}
+            className={`weekly-bar-column ${bar.isSelected ? 'is-selected' : ''} is-${props.metric}`}
             onClick={() => props.onSelectDate(bar.date)}
+            title={`${bar.date} ${props.metric === 'active' ? '活跃' : '应用'} ${valueLabel}`}
           >
             <div className="weekly-bar-track">
               <div className="weekly-bar weekly-bar-focus" style={{ height: focusHeight }}>
                 <div className="weekly-bar weekly-bar-active" style={{ height: activeHeight }} />
               </div>
             </div>
-            <span className="weekly-bar-value">{formatDuration(bar.activeSeconds)}</span>
+            <span className="weekly-bar-value">{valueLabel}</span>
             <span className="weekly-bar-day">{bar.dayLabel}</span>
           </button>
         )
