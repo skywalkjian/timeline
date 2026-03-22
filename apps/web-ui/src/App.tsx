@@ -1156,83 +1156,85 @@ function TimelinePage(props: {
               </div>
             </div>
 
-            {selectedFocusSegment ? (
-              <>
-                <div className="selection-summary-card">
-                  <div>
-                    <p className="section-kicker">
-                      {selectedFocusSegment.isBrowser ? '已选中浏览器段' : '已选中应用段'}
-                    </p>
-                    <strong>{selectedFocusSegment.label}</strong>
-                  </div>
-                  <button
-                    type="button"
-                    className="timeline-control-button"
-                    onClick={() => {
-                      props.setSelectedFocusSegmentId(null)
-                      props.setDomainFilter(null)
-                    }}
-                  >
-                    清除选择
-                  </button>
-                </div>
-
-                <div className="selection-summary-meta">
-                  <span>
-                    <strong>时间段</strong>
-                    {formatClockRange(
-                      selectedFocusSegment.startSec,
-                      selectedFocusSegment.endSec,
-                    )}
-                  </span>
-                  <span>
-                    <strong>时长</strong>
-                    {formatDuration(selectedFocusSegment.durationSec)}
-                  </span>
-                </div>
-
-                <div className="browser-context">
-                  <strong>{selectedFocusSegment.label}</strong>
-                  <span>{selectedFocusSegment.detail}</span>
-                </div>
-
-                {selectedFocusSegment.isBrowser ? (
-                  <div className="insight-grid browser-detail-layout">
-                    <div className="panel panel-subtle browser-summary-panel">
-                      <BrowserDomainList
-                        slices={props.browserDetail.slices}
-                        filter={props.domainFilter}
-                        onSelect={props.setDomainFilter}
-                        totalLabel={formatDuration(props.browserDetail.totalSeconds)}
-                      />
+            <div className="browser-detail-scroll">
+              {selectedFocusSegment ? (
+                <>
+                  <div className="selection-summary-card">
+                    <div>
+                      <p className="section-kicker">
+                        {selectedFocusSegment.isBrowser ? '已选中浏览器段' : '已选中应用段'}
+                      </p>
+                      <strong>{selectedFocusSegment.label}</strong>
                     </div>
+                    <button
+                      type="button"
+                      className="timeline-control-button"
+                      onClick={() => {
+                        props.setSelectedFocusSegmentId(null)
+                        props.setDomainFilter(null)
+                      }}
+                    >
+                      清除选择
+                    </button>
                   </div>
-                ) : (
-                  <div className="empty-card browser-empty browser-empty-compact">
-                    当前选中段不是浏览器应用，因此这里不显示域名拆分数据。
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="empty-card browser-empty">
-                点击主时间线里的任意应用段后，这里会显示该段的通用明细；如果是浏览器应用，还会额外显示域名占用时间。
-              </div>
-            )}
 
-            <div className="detail-list-section">
-              <div className="browser-domain-list-head">
-                <div>
-                  <p className="section-kicker">窗口记录</p>
-                  <h3>当前窗口内的应用段</h3>
+                  <div className="selection-summary-meta">
+                    <span>
+                      <strong>时间段</strong>
+                      {formatClockRange(
+                        selectedFocusSegment.startSec,
+                        selectedFocusSegment.endSec,
+                      )}
+                    </span>
+                    <span>
+                      <strong>时长</strong>
+                      {formatDuration(selectedFocusSegment.durationSec)}
+                    </span>
+                  </div>
+
+                  <div className="browser-context">
+                    <strong>{selectedFocusSegment.label}</strong>
+                    <span>{selectedFocusSegment.detail}</span>
+                  </div>
+
+                  {selectedFocusSegment.isBrowser ? (
+                    <div className="insight-grid browser-detail-layout">
+                      <div className="panel panel-subtle browser-summary-panel">
+                        <BrowserDomainList
+                          slices={props.browserDetail.slices}
+                          filter={props.domainFilter}
+                          onSelect={props.setDomainFilter}
+                          totalLabel={formatDuration(props.browserDetail.totalSeconds)}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="empty-card browser-empty browser-empty-compact">
+                      当前选中段不是浏览器应用，因此这里不显示域名拆分数据。
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="empty-card browser-empty">
+                  点击主时间线里的任意应用段后，这里会显示该段的通用明细；如果是浏览器应用，还会额外显示域名占用时间。
                 </div>
-                <strong>{visibleFocusItems.length} 条</strong>
-              </div>
+              )}
 
-              <FocusSegmentList
-                segments={visibleFocusItems}
-                selectedSegmentId={props.selectedFocusSegmentId}
-                onSelectSegment={handleSelectFocusSegment}
-              />
+              <div className="detail-list-section">
+                <div className="browser-domain-list-head">
+                  <div>
+                    <p className="section-kicker">窗口记录</p>
+                    <h3>当前窗口内的应用段</h3>
+                  </div>
+                  <strong>{visibleFocusItems.length} 条</strong>
+                </div>
+
+                <FocusSegmentList
+                  segments={visibleFocusItems}
+                  selectedSegmentId={props.selectedFocusSegmentId}
+                  onSelectSegment={handleSelectFocusSegment}
+                />
+              </div>
             </div>
           </div>
         </div>

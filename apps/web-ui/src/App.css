@@ -1022,9 +1022,14 @@ button.showcase-tag {
 }
 
 .browser-detail-panel {
+  display: flex;
+  flex-direction: column;
   min-height: 420px;
+  height: clamp(520px, calc(100vh - 36px), 760px);
+  max-height: calc(100vh - 36px);
   position: sticky;
   top: 18px;
+  overflow: hidden;
 }
 
 .timeline-page-layout {
@@ -1040,25 +1045,39 @@ button.showcase-tag {
   top: 18px;
 }
 
+.browser-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+
 .browser-context {
   display: flex;
   flex-direction: column;
   gap: 4px;
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .browser-context strong {
   font-size: 0.92rem;
+  overflow-wrap: anywhere;
 }
 
 .browser-context span {
   color: var(--text-soft);
   font-size: 0.84rem;
+  overflow-wrap: anywhere;
 }
 
 .browser-detail-layout {
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  min-width: 0;
 }
 
 .detail-timeline-card {
@@ -1071,6 +1090,7 @@ button.showcase-tag {
   border: 1px solid rgba(145, 159, 180, 0.18);
   border-radius: 12px;
   background: #fbfcff;
+  min-width: 0;
 }
 
 .detail-list-section {
@@ -1079,6 +1099,7 @@ button.showcase-tag {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid rgba(145, 159, 180, 0.18);
+  min-width: 0;
 }
 
 .selection-summary-card {
@@ -1238,6 +1259,7 @@ button.showcase-tag {
 .detail-segment-list {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .detail-segment-item {
@@ -2074,6 +2096,8 @@ button.showcase-tag {
   .settings-monitor-card {
     position: static;
     top: auto;
+    height: auto;
+    max-height: none;
   }
 
   .page-header {
@@ -2088,6 +2112,11 @@ button.showcase-tag {
   .timeline-page-layout .browser-detail-panel {
     position: static;
     top: auto;
+  }
+
+  .browser-detail-scroll {
+    overflow: visible;
+    padding-right: 0;
   }
 }
 
