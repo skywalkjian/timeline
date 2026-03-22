@@ -2,6 +2,11 @@ name: Package Windows App
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to upload the package to when running manually
+        required: false
+        type: string
   release:
     types:
       - published
@@ -46,8 +51,27 @@ jobs:
           path: target/portable/output/*.zip
           if-no-files-found: error
 
+      - name: Resolve release tag
+        id: release_tag
+        shell: pwsh
+        run: |
+          $tag = ''
+
+          if ('${{ github.event_name }}' -eq 'release') {
+            $tag = '${{ github.event.release.tag_name }}'
+          }
+          elseif ('${{ github.ref_type }}' -eq 'tag') {
+            $tag = '${{ github.ref_name }}'
+          }
+          elseif ('${{ github.event.inputs.release_tag }}' -ne '') {
+            $tag = '${{ github.event.inputs.release_tag }}'
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
       - name: Attach portable package to GitHub Release
-        if: github.event_name == 'release'
+        if: steps.release_tag.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
           files: target/portable/output/*.zip
