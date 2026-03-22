@@ -1,6 +1,6 @@
 /* ActivityWatch-inspired multi-page dashboard for stats, timeline, and settings. */
 
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   API_BASE_URL,
@@ -55,7 +55,6 @@ function App() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [appFilter, setAppFilter] = useState<DashboardFilter>(null)
   const [domainFilter, setDomainFilter] = useState<DashboardFilter>(null)
-  const [selectedFocusSegmentId, setSelectedFocusSegmentId] = useState<string | null>(null)
   const [zoomHours, setZoomHours] = useState<number>(0.5)
   const [viewStartHour, setViewStartHour] = useState(0)
   const [periodSummary, setPeriodSummary] = useState<PeriodSummaryResponse | null>(null)
@@ -244,16 +243,6 @@ function App() {
     [activeOnly, timeline],
   )
 
-  const selectedFocusSegment = useMemo(() => {
-    if (!dashboard || !selectedFocusSegmentId) {
-      return null
-    }
-
-    return (
-      dashboard.focusSegments.find((segment) => segment.id === selectedFocusSegmentId) ?? null
-    )
-  }, [dashboard, selectedFocusSegmentId])
-
   const viewStartSec = viewStartHour * 3600
   const viewEndSec = viewStartSec + zoomHours * 3600
   const pageInfo = pageMeta(page)
@@ -267,7 +256,6 @@ function App() {
     startTransition(() => {
       setSelectedDate(nextDate)
       setCalendarMonth(monthFromDate(nextDate))
-      setSelectedFocusSegmentId(null)
       setDomainFilter(null)
       setZoomHours(nextWindow.zoomHours)
       setViewStartHour(nextWindow.viewStartHour)
@@ -282,7 +270,6 @@ function App() {
     startTransition(() => {
       setCalendarMonth(nextMonth)
       setSelectedDate(nextDate)
-      setSelectedFocusSegmentId(null)
       setDomainFilter(null)
       setZoomHours(nextWindow.zoomHours)
       setViewStartHour(nextWindow.viewStartHour)
@@ -293,9 +280,7 @@ function App() {
     <main className="app-shell app-layout">
       <aside className="sidebar-shell">
         <div className="sidebar-brand">
-          <p className="eyebrow">TimeLine</p>
-          <h1>个人活动</h1>
-          <p className="sidebar-text">记录您的日常活动，明白时间都去了哪里。</p>
+          <h1>TimeLine</h1>
         </div>
 
         <nav className="sidebar-nav" aria-label="页面">
@@ -373,18 +358,12 @@ function App() {
                 dashboard={dashboard}
                 appFilter={appFilter}
                 selectedDate={resolvedSelectedDate}
-                selectedFocusSegmentId={selectedFocusSegmentId}
-                selectedFocusSegment={selectedFocusSegment}
                 viewStartHour={viewStartHour}
                 viewStartSec={viewStartSec}
                 viewEndSec={viewEndSec}
                 zoomHours={zoomHours}
-                isTimelineRefreshing={isTimelineRefreshing}
-                setAppFilter={setAppFilter}
                 setZoomHours={setZoomHours}
                 setViewStartHour={setViewStartHour}
-                setSelectedFocusSegmentId={setSelectedFocusSegmentId}
-                setDomainFilter={setDomainFilter}
               />
             ) : null}
 
@@ -798,20 +777,13 @@ function TimelinePage(props: {
   dashboard: DashboardModel
   appFilter: DashboardFilter
   selectedDate: string
-  selectedFocusSegmentId: string | null
-  selectedFocusSegment: DashboardModel['focusSegments'][number] | null
   viewStartHour: number
   viewStartSec: number
   viewEndSec: number
   zoomHours: number
-  isTimelineRefreshing: boolean
-  setAppFilter: (value: DashboardFilter) => void
   setZoomHours: (hours: number) => void
   setViewStartHour: (hours: number) => void
-  setSelectedFocusSegmentId: (value: string | null | ((current: string | null) => string | null)) => void
-  setDomainFilter: (value: DashboardFilter) => void
 }) {
-  const selectedFocusSegment = props.selectedFocusSegment
   const visibleFocusItems = useMemo(
     () =>
       buildVisibleFocusItems(
@@ -825,34 +797,40 @@ function TimelinePage(props: {
     () => buildPrimaryBrowserDomainMap(visibleFocusItems, props.dashboard.browserSegments),
     [props.dashboard.browserSegments, visibleFocusItems],
   )
+  const timelineRows = useMemo(
+    () => [
+      {
+        id: 'focus-overview',
+        label: '应用总览',
+        segments: props.dashboard.focusSegments,
+        selectedKey: props.appFilter?.key ?? null,
+        splitByKey: false,
+        includeInOverview: false,
+        includeInTable: false,
+      },
+      {
+        id: 'focus',
+        label: '应用',
+        segments: props.dashboard.focusSegments,
+        selectedKey: props.appFilter?.key ?? null,
+      },
+      {
+        id: 'presence',
+        label: '状态',
+        segments: props.dashboard.presenceSegments,
+        includeInTable: false,
+      },
+    ],
+    [props.appFilter, props.dashboard.focusSegments, props.dashboard.presenceSegments],
+  )
   const zoomPresets = [0.25, 0.5, 1, 4]
+  const windowLabel = `${formatHourLabel(props.viewStartHour)} - ${formatHourLabel(
+    props.viewStartHour + props.zoomHours,
+  )}`
 
   function applyWindow(nextZoomHours: number, nextStartHour: number) {
     props.setZoomHours(nextZoomHours)
     props.setViewStartHour(clampViewStart(normalizeZoomHours(nextStartHour), nextZoomHours))
-  }
-
-  function centerOnSelectedSegment() {
-    if (!selectedFocusSegment) {
-      return
-    }
-
-    const nextZoom = clampZoomHours(
-      Math.max(
-        normalizeZoomHours((selectedFocusSegment.durationSec / 3600) * 1.6),
-        MIN_ZOOM_HOURS,
-      ),
-    )
-    const segmentMidpoint =
-      selectedFocusSegment.startSec + selectedFocusSegment.durationSec / 2
-    const nextStart = clampViewStart(segmentMidpoint / 3600 - nextZoom / 2, nextZoom)
-
-    applyWindow(nextZoom, nextStart)
-  }
-
-  function handleSelectFocusSegment(segment: ChartSegment) {
-    props.setSelectedFocusSegmentId((current) => (current === segment.id ? null : segment.id))
-    props.setDomainFilter(null)
   }
 
   return (
@@ -862,15 +840,11 @@ function TimelinePage(props: {
           <div className="panel page-panel timeline-panel">
             <div className="panel-header">
               <div>
-                <p className="section-kicker">时间线</p>
-                <h2>应用时间线</h2>
+                <h2>事件时间线</h2>
               </div>
-              <div className="timeline-panel-actions">
-                <RefreshBadge active={props.isTimelineRefreshing} />
-                <p className="timezone-label">
-                  当前窗口 {formatHourLabel(props.viewStartHour)} -{' '}
-                  {formatHourLabel(props.viewStartHour + props.zoomHours)}
-                </p>
+              <div className="timeline-header-meta">
+                <span className="timeline-meta-pill">窗口 {windowLabel}</span>
+                <span className="timeline-meta-pill">片段 {visibleFocusItems.length}</span>
               </div>
             </div>
 
@@ -907,7 +881,7 @@ function TimelinePage(props: {
                   className="timeline-control-button"
                   onClick={() => applyWindow(props.zoomHours, 0)}
                 >
-                  回到起点
+                  起点
                 </button>
                 <button
                   type="button"
@@ -916,49 +890,17 @@ function TimelinePage(props: {
                 >
                   向后
                 </button>
-                {selectedFocusSegment ? (
-                  <button
-                    type="button"
-                    className="timeline-control-button"
-                    onClick={centerOnSelectedSegment}
-                  >
-                    定位到选中段
-                  </button>
-                ) : null}
               </div>
             </div>
 
             <TimelineChart
-              rows={[
-                {
-                  id: 'focus-overview',
-                  label: '应用总览',
-                  segments: props.dashboard.focusSegments,
-                  selectedKey: props.appFilter?.key ?? null,
-                  splitByKey: false,
-                  includeInOverview: false,
-                  includeInTable: false,
-                },
-                {
-                  id: 'focus',
-                  label: '应用',
-                  segments: props.dashboard.focusSegments,
-                  selectedKey: props.appFilter?.key ?? null,
-                },
-                {
-                  id: 'presence',
-                  label: '状态',
-                  segments: props.dashboard.presenceSegments,
-                  includeInTable: false,
-                },
-              ]}
+              rows={timelineRows}
               viewStartSec={props.viewStartSec}
               viewEndSec={props.viewEndSec}
               baseDate={props.selectedDate}
               interactiveZoom
               minViewHours={MIN_ZOOM_HOURS}
               maxViewHours={MAX_ZOOM_HOURS}
-              selectedSegmentId={props.selectedFocusSegmentId}
               onViewportChange={(nextStartSec, nextEndSec) => {
                 const nextZoom = clampZoomHours(
                   normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
@@ -966,13 +908,6 @@ function TimelinePage(props: {
                 const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
                 props.setZoomHours(nextZoom)
                 props.setViewStartHour(clampViewStart(nextStartHour, nextZoom))
-              }}
-              onSelectSegment={(segment) => {
-                if (segment.tone !== 'focus') {
-                  return
-                }
-
-                handleSelectFocusSegment(segment)
               }}
             />
           </div>
@@ -982,40 +917,22 @@ function TimelinePage(props: {
           <div className="panel page-panel browser-detail-panel">
             <div className="panel-header">
               <div>
-                <p className="section-kicker">明细</p>
-                <h2>进程</h2>
+                <h2>事件列表</h2>
               </div>
-              <div className="timeline-panel-actions">
-                <RefreshBadge active={props.isTimelineRefreshing} />
+              <div className="timeline-header-meta">
+                <span className="timeline-meta-pill">窗口内 {visibleFocusItems.length}</span>
               </div>
-            </div>
-
-            <div className="browser-detail-summary">
-              {selectedFocusSegment ? (
-                <div className="detail-current-card">
-                  <strong>{selectedFocusSegment.label}</strong>
-                  <span>
-                    {formatClockRange(
-                      selectedFocusSegment.startSec,
-                      selectedFocusSegment.endSec,
-                    )}
-                  </span>
-                </div>
-              ) : (
-                <div className="detail-empty-state">
-                  <strong>未选择</strong>
-                  <span>点击左侧任意一段</span>
-                </div>
-              )}
             </div>
 
             <div className="detail-list-section">
+              <div className="detail-list-meta">
+                <span>当前窗口</span>
+                <strong>{visibleFocusItems.length}</strong>
+              </div>
               <div className="detail-segment-scroll">
                 <FocusSegmentList
                   segments={visibleFocusItems}
                   browserDomainBySegmentId={browserDomainBySegmentId}
-                  selectedSegmentId={props.selectedFocusSegmentId}
-                  onSelectSegment={handleSelectFocusSegment}
                 />
               </div>
             </div>
@@ -1147,11 +1064,9 @@ function SettingsPage(props: {
   )
 }
 
-function FocusSegmentList(props: {
+const FocusSegmentList = memo(function FocusSegmentList(props: {
   segments: ChartSegment[]
   browserDomainBySegmentId: Map<string, string>
-  selectedSegmentId: string | null
-  onSelectSegment: (segment: ChartSegment) => void
 }) {
   if (props.segments.length === 0) {
     return <div className="empty-card">暂无记录</div>
@@ -1160,14 +1075,10 @@ function FocusSegmentList(props: {
   return (
     <div className="detail-segment-list">
       {props.segments.map((segment) => {
-        const isSelected = props.selectedSegmentId === segment.id
-
         return (
-          <button
+          <article
             key={segment.id}
-            type="button"
-            className={`detail-segment-item ${isSelected ? 'is-selected' : ''}`}
-            onClick={() => props.onSelectSegment(segment)}
+            className="detail-segment-item"
             title={`${segment.label}\n${formatClockRange(segment.startSec, segment.endSec)}`}
           >
             <span className="detail-segment-row">
@@ -1181,12 +1092,15 @@ function FocusSegmentList(props: {
                 </span>
               ) : null}
             </span>
-          </button>
+            <span className="detail-segment-time">
+              {formatClockRange(segment.startSec, segment.endSec)}
+            </span>
+          </article>
         )
       })}
     </div>
   )
-}
+})
 
 function LoadingState() {
   return <div className="state-card">加载中…</div>
@@ -1244,8 +1158,7 @@ function pageMeta(page: AppPage) {
   if (page === 'timeline') {
     return {
       kicker: '时间线',
-      title: '应用时间线',
-      description: '先用显式缩放和窗口控制定位，再查看浏览器应用内部的域名明细。',
+      title: '时间线',
     }
   }
 
@@ -1253,14 +1166,12 @@ function pageMeta(page: AppPage) {
     return {
       kicker: '设置',
       title: '本地设置',
-      description: '查看当前连接、本地采集范围和当前视图参数。',
     }
   }
 
   return {
     kicker: '统计',
     title: '统计概览',
-    description: '先看当日概览，再进入应用分布、域名分布和月度回看。',
   }
 }
 

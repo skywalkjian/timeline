@@ -61,13 +61,11 @@ export function TimelineChart(props: {
   viewStartSec: number
   viewEndSec: number
   baseDate?: string
-  selectedSegmentId?: string | null
   interactiveZoom?: boolean
   showTable?: boolean
   minViewHours?: number
   maxViewHours?: number
   onViewportChange?: (startSec: number, endSec: number) => void
-  onSelectSegment?: (segment: ChartSegment) => void
 }) {
   const overviewRef = useRef<HTMLDivElement | null>(null)
   const axisTrackRef = useRef<HTMLDivElement | null>(null)
@@ -164,7 +162,6 @@ export function TimelineChart(props: {
           <strong>
             {formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}
           </strong>
-          <span>滚轮滚动列表，Shift + 滚轮缩放，悬停定位时间点，拖动底部窗口平移</span>
         </div>
 
         {hoveredSec !== null ? (
@@ -282,29 +279,21 @@ export function TimelineChart(props: {
                         row.selectedKey !== null &&
                         row.selectedKey !== undefined &&
                         row.selectedKey !== segment.key
-                      const isSelected = props.selectedSegmentId === segment.id
                       const leftPct =
                         ((clipped.startSec - props.viewStartSec) / visibleDuration) * 100
                       const widthPct =
                         ((clipped.endSec - clipped.startSec) / visibleDuration) * 100
 
                       return (
-                        <button
+                        <span
                           key={segment.id}
-                          type="button"
-                          className={`timeline-bar ${shouldDim ? 'is-dimmed' : ''} ${
-                            isSelected ? 'is-selected' : ''
-                          }`}
-                          aria-label={buildTooltipText(segment)}
+                          className={`timeline-bar ${shouldDim ? 'is-dimmed' : ''}`}
                           style={{
                             left: `${leftPct}%`,
                             width: `${Math.max(widthPct, 0.7)}%`,
                             backgroundColor: segment.color,
                           }}
                           title={buildTooltipText(segment)}
-                          onClick={() => {
-                            props.onSelectSegment?.(segment)
-                          }}
                         />
                       )
                     })}
@@ -414,13 +403,9 @@ export function TimelineChart(props: {
 
           <div className="timeline-table-body">
             {visibleItems.map((item) => (
-              <button
+              <div
                 key={`${item.id}-row`}
-                type="button"
-                className={`timeline-table-row ${item.id === props.selectedSegmentId ? 'is-selected' : ''}`}
-                onClick={() => {
-                  props.onSelectSegment?.(item)
-                }}
+                className="timeline-table-row"
               >
                 <span className="timeline-table-name">
                   <i style={{ backgroundColor: item.color }} />
@@ -430,7 +415,7 @@ export function TimelineChart(props: {
                 <span className="timeline-table-detail">{item.detail}</span>
                 <span>{formatClockRange(item.startSec, item.endSec)}</span>
                 <span>{formatDuration(item.durationSec)}</span>
-              </button>
+              </div>
             ))}
           </div>
         </div>
