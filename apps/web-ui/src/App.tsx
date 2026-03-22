@@ -442,16 +442,20 @@ function StatsPage(props: {
           selectedSummary={selectedSummary}
           dashboard={props.dashboard}
           topDomains={topDomains}
+          appFilter={props.appFilter}
+          onSelectApp={props.setAppFilter}
         />
         <WeeklyRhythmCard
           periodSummary={props.periodSummary}
           weekBars={weekBars}
           topApps={topApps}
           isCurrentDate={isCurrentDate}
+          appFilter={props.appFilter}
+          onSelectApp={props.setAppFilter}
+          onSelectDate={props.onSelectDate}
         />
         <FocusBalanceCard
           dashboard={props.dashboard}
-          periodSummary={props.periodSummary}
           activeSeconds={presenceByKey.get('active') ?? 0}
           idleSeconds={presenceByKey.get('idle') ?? 0}
           lockedSeconds={presenceByKey.get('locked') ?? 0}
@@ -520,6 +524,8 @@ function DailySnapshotCard(props: {
   selectedSummary: DaySummary | null
   dashboard: DashboardModel
   topDomains: DonutSlice[]
+  appFilter: DashboardFilter
+  onSelectApp: (value: DashboardFilter) => void
 }) {
   const appSlices = props.dashboard.appSlices.filter((slice) => slice.key !== 'others').slice(0, 4)
   const topApp = appSlices[0] ?? null
@@ -542,6 +548,14 @@ function DailySnapshotCard(props: {
           slices={appSlices}
           primaryLabel={formatDuration(props.dashboard.summary.activeSeconds)}
           secondaryLabel="活跃时长"
+          selectedKey={props.appFilter?.kind === 'app' ? props.appFilter.key : null}
+          onSelect={(key) => {
+            props.onSelectApp(
+              props.appFilter?.kind === 'app' && props.appFilter.key === key
+                ? null
+                : { kind: 'app', key },
+            )
+          }}
         />
       </div>
 
@@ -558,10 +572,20 @@ function DailySnapshotCard(props: {
 
       <div className="showcase-tag-list">
         {topApp ? (
-          <span className="showcase-tag">
+          <button
+            type="button"
+            className={`showcase-tag ${props.appFilter?.kind === 'app' && props.appFilter.key === topApp.key ? 'is-selected' : ''}`}
+            onClick={() => {
+              props.onSelectApp(
+                props.appFilter?.kind === 'app' && props.appFilter.key === topApp.key
+                  ? null
+                  : { kind: 'app', key: topApp.key },
+              )
+            }}
+          >
             常用应用
             <strong>{topApp.label}</strong>
-          </span>
+          </button>
         ) : null}
         {topDomain ? (
           <span className="showcase-tag">
@@ -585,6 +609,9 @@ function WeeklyRhythmCard(props: {
   weekBars: WeekBarDatum[]
   topApps: DonutSlice[]
   isCurrentDate: boolean
+  appFilter: DashboardFilter
+  onSelectApp: (value: DashboardFilter) => void
+  onSelectDate: (date: string) => void
 }) {
   return (
     <article className="showcase-card showcase-card-dashboard">
@@ -607,7 +634,7 @@ function WeeklyRhythmCard(props: {
         </div>
       </div>
 
-      <WeeklyBarChart bars={props.weekBars} />
+      <WeeklyBarChart bars={props.weekBars} onSelectDate={props.onSelectDate} />
 
       <div className="mini-list-card">
         <div className="mini-list-head">
@@ -619,13 +646,24 @@ function WeeklyRhythmCard(props: {
             <div className="empty-card">所选日期没有应用记录</div>
           ) : (
             props.topApps.map((slice) => (
-              <div key={slice.id} className="mini-usage-row">
+              <button
+                key={slice.id}
+                type="button"
+                className={`mini-usage-row ${props.appFilter?.kind === 'app' && props.appFilter.key === slice.key ? 'is-selected' : ''}`}
+                onClick={() => {
+                  props.onSelectApp(
+                    props.appFilter?.kind === 'app' && props.appFilter.key === slice.key
+                      ? null
+                      : { kind: 'app', key: slice.key },
+                  )
+                }}
+              >
                 <span className="mini-usage-name">
                   <i style={{ backgroundColor: slice.color }} />
                   {slice.label}
                 </span>
                 <span>{formatDuration(slice.value)}</span>
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -636,7 +674,6 @@ function WeeklyRhythmCard(props: {
 
 function FocusBalanceCard(props: {
   dashboard: DashboardModel
-  periodSummary: PeriodSummaryResponse | null
   activeSeconds: number
   idleSeconds: number
   lockedSeconds: number
@@ -647,6 +684,15 @@ function FocusBalanceCard(props: {
       ? props.dashboard.summary.activeSeconds / props.dashboard.summary.focusSeconds
       : 0
   const appCount = props.dashboard.appSlices.filter((slice) => slice.key !== 'others').length
+  const [selectedPresenceKey, setSelectedPresenceKey] = useState<'active' | 'idle' | 'locked'>('active')
+  const selectedPresenceLabel =
+    selectedPresenceKey === 'active' ? '活跃' : selectedPresenceKey === 'idle' ? '空闲' : '锁定'
+  const selectedPresenceValue =
+    selectedPresenceKey === 'active'
+      ? props.activeSeconds
+      : selectedPresenceKey === 'idle'
+        ? props.idleSeconds
+        : props.lockedSeconds
 
   return (
     <article className="showcase-card showcase-card-focus">
@@ -665,6 +711,8 @@ function FocusBalanceCard(props: {
         <FocusDial
           activeSeconds={props.dashboard.summary.activeSeconds}
           focusSeconds={props.dashboard.summary.focusSeconds}
+          selectedLabel={selectedPresenceLabel}
+          selectedValue={selectedPresenceValue}
         />
       </div>
 
@@ -682,9 +730,27 @@ function FocusBalanceCard(props: {
       </div>
 
       <div className="presence-strip">
-        <span>活跃 {formatDuration(props.activeSeconds)}</span>
-        <span>空闲 {formatDuration(props.idleSeconds)}</span>
-        <span>锁定 {formatDuration(props.lockedSeconds)}</span>
+        <button
+          type="button"
+          className={`presence-pill ${selectedPresenceKey === 'active' ? 'is-selected' : ''}`}
+          onClick={() => setSelectedPresenceKey('active')}
+        >
+          活跃 {formatDuration(props.activeSeconds)}
+        </button>
+        <button
+          type="button"
+          className={`presence-pill ${selectedPresenceKey === 'idle' ? 'is-selected' : ''}`}
+          onClick={() => setSelectedPresenceKey('idle')}
+        >
+          空闲 {formatDuration(props.idleSeconds)}
+        </button>
+        <button
+          type="button"
+          className={`presence-pill ${selectedPresenceKey === 'locked' ? 'is-selected' : ''}`}
+          onClick={() => setSelectedPresenceKey('locked')}
+        >
+          锁定 {formatDuration(props.lockedSeconds)}
+        </button>
       </div>
     </article>
   )
@@ -694,6 +760,8 @@ function UsageOrbit(props: {
   slices: DonutSlice[]
   primaryLabel: string
   secondaryLabel: string
+  selectedKey: string | null
+  onSelect: (key: string) => void
 }) {
   const size = 182
   const radius = 60
@@ -730,6 +798,7 @@ function UsageOrbit(props: {
         const dash = Math.max(segmentLength - 5, 0)
         const offset = -consumed
         consumed += segmentLength
+        const isSelected = props.selectedKey === slice.key
 
         return (
           <circle
@@ -739,11 +808,22 @@ function UsageOrbit(props: {
             r={radius}
             fill="none"
             stroke={slice.color}
-            strokeWidth="14"
+            strokeWidth={isSelected ? '18' : '14'}
             strokeLinecap="round"
             strokeDasharray={`${dash} ${circumference}`}
             strokeDashoffset={offset}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            className={`usage-orbit-segment ${isSelected ? 'is-selected' : ''}`}
+            tabIndex={0}
+            role="button"
+            aria-label={`${slice.label} ${formatDuration(slice.value)}`}
+            onClick={() => props.onSelect(slice.key)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                props.onSelect(slice.key)
+              }
+            }}
           />
         )
       })}
@@ -758,7 +838,12 @@ function UsageOrbit(props: {
   )
 }
 
-function FocusDial(props: { activeSeconds: number; focusSeconds: number }) {
+function FocusDial(props: {
+  activeSeconds: number
+  focusSeconds: number
+  selectedLabel: string
+  selectedValue: number
+}) {
   const size = 198
   const radius = 64
   const circumference = 2 * Math.PI * radius
@@ -819,6 +904,9 @@ function FocusDial(props: { activeSeconds: number; focusSeconds: number }) {
       <text x="50%" y="58%" textAnchor="middle" className="focus-dial-secondary">
         应用 {formatDuration(props.focusSeconds)}
       </text>
+      <text x="50%" y="67%" textAnchor="middle" className="focus-dial-tertiary">
+        {props.selectedLabel} {formatDuration(props.selectedValue)}
+      </text>
     </svg>
   )
 }
@@ -831,7 +919,7 @@ type WeekBarDatum = {
   isSelected: boolean
 }
 
-function WeeklyBarChart(props: { bars: WeekBarDatum[] }) {
+function WeeklyBarChart(props: { bars: WeekBarDatum[]; onSelectDate: (date: string) => void }) {
   const maxFocus = Math.max(...props.bars.map((bar) => bar.focusSeconds), 1)
 
   return (
@@ -841,7 +929,12 @@ function WeeklyBarChart(props: { bars: WeekBarDatum[] }) {
         const activeHeight = `${Math.max((bar.activeSeconds / maxFocus) * 100, bar.activeSeconds > 0 ? 10 : 0)}%`
 
         return (
-          <div key={bar.date} className={`weekly-bar-column ${bar.isSelected ? 'is-selected' : ''}`}>
+          <button
+            key={bar.date}
+            type="button"
+            className={`weekly-bar-column ${bar.isSelected ? 'is-selected' : ''}`}
+            onClick={() => props.onSelectDate(bar.date)}
+          >
             <div className="weekly-bar-track">
               <div className="weekly-bar weekly-bar-focus" style={{ height: focusHeight }}>
                 <div className="weekly-bar weekly-bar-active" style={{ height: activeHeight }} />
@@ -849,7 +942,7 @@ function WeeklyBarChart(props: { bars: WeekBarDatum[] }) {
             </div>
             <span className="weekly-bar-value">{formatDuration(bar.activeSeconds)}</span>
             <span className="weekly-bar-day">{bar.dayLabel}</span>
-          </div>
+          </button>
         )
       })}
     </div>

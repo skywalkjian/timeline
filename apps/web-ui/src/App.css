@@ -349,10 +349,28 @@
 }
 
 .usage-orbit-secondary,
-.focus-dial-secondary {
+.focus-dial-secondary,
+.focus-dial-tertiary {
   fill: var(--text-soft);
   font-family: var(--mono-family);
   font-size: 10px;
+}
+
+.focus-dial-tertiary {
+  font-size: 9px;
+}
+
+.usage-orbit-segment {
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    stroke-width 0.15s ease;
+}
+
+.usage-orbit-segment:hover,
+.usage-orbit-segment:focus-visible {
+  filter: brightness(1.06);
+  outline: none;
 }
 
 .showcase-stat-grid {
@@ -408,6 +426,15 @@
   font-size: 0.66rem;
 }
 
+button.showcase-tag {
+  cursor: pointer;
+}
+
+.showcase-tag.is-selected {
+  border-color: rgba(47, 111, 219, 0.34);
+  background: rgba(235, 242, 255, 0.95);
+}
+
 .showcase-tag strong {
   color: #153261;
   font-size: 0.68rem;
@@ -445,6 +472,11 @@
   display: grid;
   gap: 6px;
   justify-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 
 .weekly-bar-column.is-selected .weekly-bar-day {
@@ -525,8 +557,17 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
   font-family: var(--mono-family);
   font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mini-usage-row.is-selected {
+  color: #2450a0;
 }
 
 .mini-usage-name {
@@ -571,6 +612,23 @@
   color: var(--text-dim);
   font-family: var(--mono-family);
   font-size: 0.64rem;
+}
+
+.presence-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(145, 159, 180, 0.16);
+  color: var(--text-dim);
+  font-family: var(--mono-family);
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+.presence-pill.is-selected {
+  border-color: rgba(47, 111, 219, 0.34);
+  background: rgba(235, 242, 255, 0.96);
+  color: #1e4691;
 }
 
 .metric-card {
