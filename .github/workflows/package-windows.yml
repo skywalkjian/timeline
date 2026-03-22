@@ -35,33 +35,19 @@ jobs:
           rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
           rustup default stable-x86_64-pc-windows-msvc
 
-      - name: Install Inno Setup
+      - name: Build portable package
         shell: pwsh
-        run: |
-          $installerDir = Join-Path $env:RUNNER_TEMP 'InnoSetup6'
-          $installerPath = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+        run: .\scripts\build-portable.ps1
 
-          Invoke-WebRequest -Uri 'https://jrsoftware.org/download.php/is.exe' -OutFile $installerPath
-          & $installerPath /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR="$installerDir"
-
-          "INNO_SETUP_DIR=$installerDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          $installerDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Build portable package and installer
-        shell: pwsh
-        run: .\scripts\build-installer.ps1
-
-      - name: Upload packaging outputs
+      - name: Upload portable package
         uses: actions/upload-artifact@v4
         with:
-          name: timeline-windows-packages
-          path: target/installer/output/*
+          name: timeline-windows-portable
+          path: target/portable/output/*.zip
           if-no-files-found: error
 
-      - name: Attach packages to GitHub Release
+      - name: Attach portable package to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            target/installer/output/*.exe
-            target/installer/output/*.zip
+          files: target/portable/output/*.zip

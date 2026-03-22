@@ -70,31 +70,24 @@ npm run dev
 - 默认不记录页面正文、输入内容、剪贴板和截图
 - 所有数据默认只保存在本地 SQLite
 
-## 打包安装包
+## 打包便携包
 
-当前仓库已经提供 Windows 打包脚本，默认会先生成一个“解压后可直接运行”的便携包；如果本机安装了 `Inno Setup 6`，还会额外生成可双击安装的 `.exe` 安装器。
+当前仓库只提供 Windows 便携包打包脚本，生成一个“解压后可直接运行”的 zip 包。
 
 另外，仓库已经提供 GitHub Actions 工作流：
 
 - 手动触发
 - 发布 GitHub Release 时自动触发
-- Release 触发时会把 `.exe` 和 `.zip` 自动挂到当前 Release 的 assets
+- Release 触发时会把便携包 `.zip` 自动挂到当前 Release 的 assets
 
 ### 前置条件
 
 1. 安装 Node.js / npm
 2. 安装 Rust toolchain
-3. 可选安装 Inno Setup 6
-
-如果 `ISCC.exe` 没有进 PATH，脚本也会尝试从以下默认位置查找：
-
-- `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
-- `C:\Program Files\Inno Setup 6\ISCC.exe`
-
 ### 构建打包产物
 
 ```powershell
-.\scripts\build-installer.ps1
+.\scripts\build-portable.ps1
 ```
 
 脚本会自动完成：
@@ -103,12 +96,10 @@ npm run dev
 2. 构建静态 CRT 的 `timeline-agent.exe`
 3. 收集浏览器扩展目录
 4. 生成一个可直接运行的便携包
-5. 如果检测到 `ISCC.exe`，再额外输出 Inno Setup 安装包
 
 输出目录：
 
-- 便携包：`target\installer\output\timeline-portable-<version>.zip`
-- 安装包：`target\installer\output\timeline-setup-<version>.exe`
+- 便携包：`target\portable\output\timeline-portable-<version>.zip`
 
 ### 便携版布局
 
@@ -117,10 +108,3 @@ npm run dev
 - 默认使用包内的 `config\timeline-agent.toml`
 - 默认把数据库写到包内的 `data\`
 - 包内自带前端静态文件和浏览器扩展目录
-
-### 安装版布局
-
-- 程序安装到 `C:\Program Files\Timeline`
-- 用户配置写到 `%LOCALAPPDATA%\Timeline\config\timeline-agent.toml`
-- 用户数据写到 `%LOCALAPPDATA%\Timeline\data`
-- 浏览器扩展会一起安装到程序目录下的 `browser-extension`
