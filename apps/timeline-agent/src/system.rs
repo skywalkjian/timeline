@@ -166,7 +166,9 @@ fn run_tray_loop(state: AgentState) -> Result<()> {
             Event::UserEvent(TrayUserEvent::Menu(menu_event)) => {
                 state_for_loop.mark_tray_online_sync(OffsetDateTime::now_utc());
                 if menu_event.id == open_id {
-                    if let Err(error) = open_frontend(&state_for_loop.config().effective_web_ui_url()) {
+                    if let Err(error) =
+                        open_frontend(&state_for_loop.config().effective_web_ui_url())
+                    {
                         warn!(?error, "failed to open frontend from tray menu");
                     }
                 } else if menu_event.id == quit_id {
@@ -183,10 +185,12 @@ fn build_tray_menu() -> Menu {
     let menu = Menu::new();
     let open_item = MenuItem::with_id(MENU_OPEN_ID, "打开时间线", true, None::<Accelerator>);
     let quit_item = MenuItem::with_id(MENU_QUIT_ID, "退出", true, None::<Accelerator>);
-    menu.append(&open_item).expect("failed to append open menu item");
+    menu.append(&open_item)
+        .expect("failed to append open menu item");
     menu.append(&PredefinedMenuItem::separator())
         .expect("failed to append tray separator");
-    menu.append(&quit_item).expect("failed to append quit menu item");
+    menu.append(&quit_item)
+        .expect("failed to append quit menu item");
     menu
 }
 

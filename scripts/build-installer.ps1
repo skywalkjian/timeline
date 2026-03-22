@@ -177,8 +177,8 @@ Set-Content -Path (Join-Path $docsStage 'README-install.txt') -Value $installRea
 Set-Content -Path (Join-Path $portableStage 'README-install.txt') -Value $installReadme -Encoding UTF8
 
 $portableConfig = @'
-database_path = "data/timeline.sqlite"
-lockfile_path = "data/timeline-agent.lock"
+database_path = "../data/timeline.sqlite"
+lockfile_path = "../data/timeline-agent.lock"
 listen_addr = "127.0.0.1:46215"
 web_ui_url = "http://127.0.0.1:46215/#/stats"
 idle_threshold_secs = 300

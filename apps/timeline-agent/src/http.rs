@@ -2,8 +2,10 @@
 
 use crate::{state::AgentState, system, trackers::sync_browser_event};
 use anyhow::Result;
-use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::extract::{Query, Request, State};
+use axum::http::header::{CONTENT_TYPE, ORIGIN};
+use axum::http::{HeaderValue, Method, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::{
     Json, Router,
@@ -16,7 +18,7 @@ use common::{
 use serde::Deserialize;
 use time::format_description::parse;
 use time::{Date, Duration, OffsetDateTime};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
 pub fn build_router(state: AgentState) -> Router {
@@ -30,6 +32,7 @@ pub fn build_router(state: AgentState) -> Router {
         .route("/api/settings/autostart", post(post_autostart))
         .route("/api/debug/recent-events", get(get_recent_events))
         .route("/api/events/browser", post(post_browser_event))
+        .layer(middleware::from_fn(validate_request_origin))
         .layer(build_cors_layer())
         .with_state(state.clone());
 
@@ -164,9 +167,74 @@ fn parse_or_today(value: Option<&str>, timezone: time::UtcOffset) -> Result<Date
 
 fn build_cors_layer() -> CorsLayer {
     CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any)
+        .allow_origin(AllowOrigin::predicate(|origin, _request_parts| {
+            is_allowed_loopback_origin(origin)
+        }))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([CONTENT_TYPE])
+}
+
+async fn validate_request_origin(request: Request, next: Next) -> Response {
+    if let Some(origin) = request.headers().get(ORIGIN)
+        && !is_allowed_browser_origin(origin, request.headers())
+    {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::err(
+                "forbidden_origin",
+                "browser requests must come from a local loopback origin",
+            )),
+        )
+            .into_response();
+    }
+
+    next.run(request).await
+}
+
+fn is_allowed_browser_origin(origin: &HeaderValue, headers: &axum::http::HeaderMap) -> bool {
+    if is_allowed_loopback_origin(origin) {
+        return true;
+    }
+
+    if origin
+        .to_str()
+        .ok()
+        .is_some_and(|value| value.starts_with("chrome-extension://"))
+    {
+        return headers
+            .get("x-timeline-extension")
+            .and_then(|value| value.to_str().ok())
+            == Some("browser-bridge");
+    }
+
+    false
+}
+
+fn is_allowed_loopback_origin(origin: &HeaderValue) -> bool {
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+
+    let Some((scheme, rest)) = origin.split_once("://") else {
+        return false;
+    };
+
+    if scheme != "http" && scheme != "https" {
+        return false;
+    }
+
+    let authority = rest.split('/').next().unwrap_or(rest);
+    let host = extract_host(authority);
+
+    matches!(host, Some("127.0.0.1" | "localhost" | "::1"))
+}
+
+fn extract_host(authority: &str) -> Option<&str> {
+    if let Some(remainder) = authority.strip_prefix('[') {
+        return remainder.split_once(']').map(|(host, _)| host);
+    }
+
+    Some(authority.split(':').next().unwrap_or(authority))
 }
 
 async fn frontend_not_built() -> impl IntoResponse {
@@ -294,5 +362,34 @@ impl IntoResponse for AppError {
             }),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_loopback_origin;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn allows_loopback_http_origins() {
+        assert!(is_allowed_loopback_origin(&HeaderValue::from_static(
+            "http://127.0.0.1:4173"
+        )));
+        assert!(is_allowed_loopback_origin(&HeaderValue::from_static(
+            "http://localhost:46215"
+        )));
+        assert!(is_allowed_loopback_origin(&HeaderValue::from_static(
+            "http://[::1]:5173"
+        )));
+    }
+
+    #[test]
+    fn rejects_non_loopback_origins() {
+        assert!(!is_allowed_loopback_origin(&HeaderValue::from_static(
+            "https://example.com"
+        )));
+        assert!(!is_allowed_loopback_origin(&HeaderValue::from_static(
+            "chrome-extension://abc123"
+        )));
     }
 }

@@ -2,9 +2,12 @@
  * Browser bridge for reporting the focused browser window's active tab.
  * Each browser window can have its own active tab, so we cache per-window state
  * and only send the active tab belonging to the currently focused window.
+ * The agent base URL is persisted after a successful request or after the
+ * self-hosted dashboard is discovered on a loopback origin.
  */
 
-const AGENT_BASE_URL = 'http://127.0.0.1:46215'
+const AGENT_BASE_URL_STORAGE_KEY = 'agent-base-url'
+const DEFAULT_AGENT_BASE_URLS = ['http://127.0.0.1:46215', 'http://localhost:46215']
 const HEARTBEAT_ALARM = 'timeline-heartbeat'
 const FOLLOW_UP_DELAYS_MS = [250, 1200, 4000]
 const activeTabsByWindow = new Map()
@@ -90,6 +93,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 })
 
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === 'timeline-discover-agent' && typeof message.origin === 'string') {
+    void rememberDiscoveredAgentOrigin(message.origin)
+  }
+})
+
 async function bootstrapState(reason) {
   await syncActiveTabs()
   await syncFocusedWindowId()
@@ -164,26 +173,33 @@ async function reportTab(tab, reason) {
     return
   }
 
-  try {
-    const response = await fetch(`${AGENT_BASE_URL}/api/events/browser`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
+  const agentBaseUrls = await getAgentBaseUrls()
 
-    const result = await response.json().catch(() => null)
-    if (!response.ok || !result?.ok || result.data?.accepted === false) {
+  for (const agentBaseUrl of agentBaseUrls) {
+    const result = await postBrowserEvent(agentBaseUrl, payload)
+
+    if (result.kind === 'network_error') {
+      continue
+    }
+
+    await rememberAgentBaseUrl(agentBaseUrl)
+
+    if (result.kind === 'rejected') {
       console.warn(`timeline browser bridge rejected event: ${reason}`, {
         payload,
-        status: response.status,
-        result,
+        agent_base_url: agentBaseUrl,
+        status: result.status,
+        result: result.body,
       })
     }
-  } catch (error) {
-    console.warn(`timeline browser bridge skipped event: ${reason}`, error)
+
+    return
   }
+
+  console.warn(`timeline browser bridge skipped event: ${reason}`, {
+    payload,
+    tried_agent_base_urls: agentBaseUrls,
+  })
 }
 
 function cacheActiveTab(tab) {
@@ -228,4 +244,91 @@ function ensureHeartbeat() {
   chrome.alarms.create(HEARTBEAT_ALARM, {
     periodInMinutes: 1,
   })
+}
+
+async function getAgentBaseUrls() {
+  const storedBaseUrl = await readStoredAgentBaseUrl()
+  return uniqueValues([storedBaseUrl, ...DEFAULT_AGENT_BASE_URLS].filter(Boolean))
+}
+
+async function readStoredAgentBaseUrl() {
+  const stored = await chrome.storage.local.get(AGENT_BASE_URL_STORAGE_KEY)
+  return typeof stored[AGENT_BASE_URL_STORAGE_KEY] === 'string'
+    ? stored[AGENT_BASE_URL_STORAGE_KEY]
+    : null
+}
+
+async function rememberAgentBaseUrl(agentBaseUrl) {
+  if (!isLoopbackHttpUrl(agentBaseUrl)) {
+    return
+  }
+
+  await chrome.storage.local.set({
+    [AGENT_BASE_URL_STORAGE_KEY]: agentBaseUrl,
+  })
+}
+
+async function rememberDiscoveredAgentOrigin(origin) {
+  if (!isLoopbackHttpUrl(origin)) {
+    return
+  }
+
+  try {
+    const response = await fetch(`${origin}/health`)
+    const result = await response.json().catch(() => null)
+    if (response.ok && result?.ok && result.data?.service === 'timeline-agent') {
+      await rememberAgentBaseUrl(origin)
+    }
+  } catch {
+    // Ignore local pages that are not served by the timeline agent.
+  }
+}
+
+async function postBrowserEvent(agentBaseUrl, payload) {
+  try {
+    const response = await fetch(`${agentBaseUrl}/api/events/browser`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Timeline-Extension': 'browser-bridge',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const result = await response.json().catch(() => null)
+    if (!response.ok || !result?.ok || result.data?.accepted === false) {
+      return {
+        kind: 'rejected',
+        status: response.status,
+        body: result,
+      }
+    }
+
+    return {
+      kind: 'success',
+      status: response.status,
+      body: result,
+    }
+  } catch (error) {
+    return {
+      kind: 'network_error',
+      error,
+    }
+  }
+}
+
+function uniqueValues(values) {
+  return Array.from(new Set(values))
+}
+
+function isLoopbackHttpUrl(value) {
+  try {
+    const parsedUrl = new URL(value)
+    return (
+      ['http:', 'https:'].includes(parsedUrl.protocol) &&
+      ['127.0.0.1', 'localhost'].includes(parsedUrl.hostname)
+    )
+  } catch {
+    return false
+  }
 }

@@ -45,12 +45,18 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn load(explicit_path: Option<PathBuf>) -> Result<(Self, PathBuf)> {
-        let path = resolve_config_path(explicit_path)?;
-        let runtime_root = runtime_root_from_config_path(&path);
+        let has_explicit_path = explicit_path.is_some();
+        let runtime_root = discover_runtime_root()?;
+        let path = resolve_config_path(explicit_path, &runtime_root)?;
 
         if !path.exists() {
             let mut config = Self::default();
-            config.resolve_relative_paths(&runtime_root);
+            let defaults_base_dir = if has_explicit_path {
+                path.parent().unwrap_or(Path::new("."))
+            } else {
+                runtime_root.as_path()
+            };
+            config.resolve_relative_paths(defaults_base_dir);
             return Ok((config, path));
         }
 
@@ -63,7 +69,7 @@ impl AppConfig {
             config.web_ui_url = config.self_hosted_web_ui_url();
         }
 
-        config.resolve_relative_paths(&runtime_root);
+        config.resolve_relative_paths(path.parent().unwrap_or(Path::new(".")));
 
         Ok((config, path))
     }
@@ -151,32 +157,28 @@ fn ensure_parent(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn resolve_config_path(explicit_path: Option<PathBuf>) -> Result<PathBuf> {
+fn resolve_config_path(explicit_path: Option<PathBuf>, runtime_root: &Path) -> Result<PathBuf> {
     match explicit_path {
         Some(path) => absolutize_from(std::env::current_dir()?, path),
-        None => Ok(discover_runtime_root()?.join(DEFAULT_CONFIG_PATH)),
+        None => Ok(runtime_root.join(DEFAULT_CONFIG_PATH)),
     }
 }
 
 fn discover_runtime_root() -> Result<PathBuf> {
     let current_dir = std::env::current_dir().context("failed to read current directory")?;
-    let mut candidates = vec![current_dir.clone()];
+    let exe_candidates = current_exe_parent_candidates();
 
-    if let Ok(current_exe) = std::env::current_exe()
-        && let Some(exe_dir) = current_exe.parent()
-    {
-        candidates.push(exe_dir.to_path_buf());
-
-        if let Some(parent) = exe_dir.parent() {
-            candidates.push(parent.to_path_buf());
-
-            if let Some(grandparent) = parent.parent() {
-                candidates.push(grandparent.to_path_buf());
-            }
+    for candidate in &exe_candidates {
+        if looks_like_runtime_root(candidate) {
+            return Ok(candidate.clone());
         }
     }
 
-    for candidate in candidates {
+    if let Some(exe_dir) = exe_candidates.first() {
+        return Ok(exe_dir.clone());
+    }
+
+    for candidate in parent_candidates(&current_dir) {
         if looks_like_runtime_root(&candidate) {
             return Ok(candidate);
         }
@@ -185,26 +187,35 @@ fn discover_runtime_root() -> Result<PathBuf> {
     Ok(current_dir)
 }
 
+fn current_exe_parent_candidates() -> Vec<PathBuf> {
+    if let Ok(current_exe) = std::env::current_exe()
+        && let Some(exe_dir) = current_exe.parent()
+    {
+        return parent_candidates(exe_dir);
+    }
+
+    Vec::new()
+}
+
+fn parent_candidates(base: &Path) -> Vec<PathBuf> {
+    let mut candidates = vec![base.to_path_buf()];
+
+    if let Some(parent) = base.parent() {
+        candidates.push(parent.to_path_buf());
+
+        if let Some(grandparent) = parent.parent() {
+            candidates.push(grandparent.to_path_buf());
+        }
+    }
+
+    candidates
+}
+
 fn looks_like_runtime_root(path: &Path) -> bool {
     path.join(DEFAULT_CONFIG_PATH).is_file()
         || path.join("Cargo.toml").is_file()
         || path.join("web-ui/dist/index.html").is_file()
         || path.join("apps/web-ui").is_dir()
-}
-
-fn runtime_root_from_config_path(config_path: &Path) -> PathBuf {
-    let Some(parent) = config_path.parent() else {
-        return PathBuf::from(".");
-    };
-
-    if parent
-        .file_name()
-        .is_some_and(|name| name.eq_ignore_ascii_case("config"))
-    {
-        return parent.parent().unwrap_or(parent).to_path_buf();
-    }
-
-    parent.to_path_buf()
 }
 
 fn resolve_path(base: &Path, path: &Path) -> PathBuf {
@@ -225,24 +236,18 @@ fn absolutize_from(base: PathBuf, path: PathBuf) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, resolve_path, runtime_root_from_config_path};
+    use super::{AppConfig, parent_candidates, resolve_path};
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn derives_runtime_root_from_config_directory_layout() {
-        let config_path = PathBuf::from(r"C:\Timeline\config\timeline-agent.toml");
+    fn returns_parent_candidates_in_priority_order() {
         assert_eq!(
-            runtime_root_from_config_path(&config_path),
-            PathBuf::from(r"C:\Timeline")
-        );
-    }
-
-    #[test]
-    fn falls_back_to_parent_for_nonstandard_config_path() {
-        let config_path = PathBuf::from(r"C:\Timeline\timeline-agent.toml");
-        assert_eq!(
-            runtime_root_from_config_path(&config_path),
-            PathBuf::from(r"C:\Timeline")
+            parent_candidates(Path::new(r"C:\Timeline\config")),
+            vec![
+                PathBuf::from(r"C:\Timeline\config"),
+                PathBuf::from(r"C:\Timeline"),
+                PathBuf::from(r"C:\"),
+            ]
         );
     }
 
@@ -267,5 +272,16 @@ mod tests {
     fn keeps_absolute_runtime_paths_unchanged() {
         let path = Path::new(r"D:\data\timeline.sqlite");
         assert_eq!(resolve_path(Path::new(r"C:\Timeline"), path), path);
+    }
+
+    #[test]
+    fn resolves_config_relative_paths_against_config_directory() {
+        assert_eq!(
+            resolve_path(
+                Path::new(r"C:\Timeline\config"),
+                Path::new(r"..\data\timeline.sqlite"),
+            ),
+            PathBuf::from(r"C:\Timeline\config\..\data\timeline.sqlite")
+        );
     }
 }

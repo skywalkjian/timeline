@@ -40,6 +40,7 @@ cargo run -p timeline-agent -- --config config/timeline-agent.toml
 ```
 
 默认会把数据库写到 `data/timeline.sqlite`，监听 `127.0.0.1:46215`。
+如果配置文件放在 `config\` 目录下，配置里的相对路径建议写成 `../data/...` 这类“相对于配置文件目录”的形式。
 
 ### 2. 启动前端
 
@@ -60,6 +61,8 @@ npm run dev
 - 开启开发者模式
 - 选择“加载已解压的扩展程序”
 - 指向 `apps/browser-extension`
+
+如果你把 agent 改到了非默认 loopback 端口，先打开一次自托管仪表盘，扩展会自动记住当前本地地址。
 
 ## 关键隐私边界
 

@@ -77,20 +77,31 @@ type Interval = {
   endSec: number
 }
 
+type TimelineTimeContext = {
+  date: string
+  timezone: string
+}
+
 export function buildDashboardModel(
   timeline: TimelineDayResponse,
   activeOnly: boolean,
 ): DashboardModel {
-  const activeIntervals = buildActiveIntervals(timeline.presence_segments)
+  const timeContext = {
+    date: timeline.date,
+    timezone: timeline.timezone,
+  }
+  const activeIntervals = buildActiveIntervals(timeline.presence_segments, timeContext)
   const focusSegments = toFocusChartSegments(
     timeline.focus_segments,
     activeOnly ? activeIntervals : null,
+    timeContext,
   )
   const browserSegments = toBrowserChartSegments(
     timeline.browser_segments,
     activeOnly ? activeIntervals : null,
+    timeContext,
   )
-  const presenceSegments = toPresenceChartSegments(timeline.presence_segments)
+  const presenceSegments = toPresenceChartSegments(timeline.presence_segments, timeContext)
 
   return {
     focusSegments,
@@ -192,11 +203,18 @@ export function isFilterActive(
   return filter?.kind === kind && filter.key === key
 }
 
-function toFocusChartSegments(segments: FocusSegment[], activeIntervals: Interval[] | null) {
+function toFocusChartSegments(
+  segments: FocusSegment[],
+  activeIntervals: Interval[] | null,
+  timeContext: TimelineTimeContext,
+) {
   const results: ChartSegment[] = []
 
   for (const segment of segments) {
-    const ranges = clipSegment(toRange(segment.started_at, segment.ended_at), activeIntervals)
+    const ranges = clipSegment(
+      toRange(segment.started_at, segment.ended_at, timeContext),
+      activeIntervals,
+    )
 
     ranges.forEach((range, index) => {
       results.push({
@@ -220,11 +238,15 @@ function toFocusChartSegments(segments: FocusSegment[], activeIntervals: Interva
 function toBrowserChartSegments(
   segments: BrowserSegment[],
   activeIntervals: Interval[] | null,
+  timeContext: TimelineTimeContext,
 ) {
   const results: ChartSegment[] = []
 
   for (const segment of segments) {
-    const ranges = clipSegment(toRange(segment.started_at, segment.ended_at), activeIntervals)
+    const ranges = clipSegment(
+      toRange(segment.started_at, segment.ended_at, timeContext),
+      activeIntervals,
+    )
 
     ranges.forEach((range, index) => {
       results.push({
@@ -244,11 +266,14 @@ function toBrowserChartSegments(
   return results
 }
 
-function toPresenceChartSegments(segments: PresenceSegment[]) {
+function toPresenceChartSegments(
+  segments: PresenceSegment[],
+  timeContext: TimelineTimeContext,
+) {
   const results: ChartSegment[] = []
 
   for (const segment of segments) {
-    const range = toRange(segment.started_at, segment.ended_at)
+    const range = toRange(segment.started_at, segment.ended_at, timeContext)
     if (!range) {
       continue
     }
@@ -269,10 +294,13 @@ function toPresenceChartSegments(segments: PresenceSegment[]) {
   return results
 }
 
-function buildActiveIntervals(segments: PresenceSegment[]) {
+function buildActiveIntervals(
+  segments: PresenceSegment[],
+  timeContext: TimelineTimeContext,
+) {
   return segments
     .filter((segment) => segment.state === 'active')
-    .map((segment) => toRange(segment.started_at, segment.ended_at))
+    .map((segment) => toRange(segment.started_at, segment.ended_at, timeContext))
     .filter((segment): segment is Interval => segment !== null)
 }
 
@@ -345,13 +373,17 @@ function clipSegment(range: Interval | null, activeIntervals: Interval[] | null)
   return clipped
 }
 
-function toRange(startedAt: string, endedAt: string | null): Interval | null {
+function toRange(
+  startedAt: string,
+  endedAt: string | null,
+  timeContext: TimelineTimeContext,
+): Interval | null {
   if (!endedAt) {
     return null
   }
 
-  const startSec = toSecondsSinceMidnight(startedAt)
-  const endSec = toSecondsSinceMidnight(endedAt)
+  const startSec = toSecondsSinceMidnight(startedAt, timeContext)
+  const endSec = toSecondsSinceMidnight(endedAt, timeContext)
   if (endSec <= startSec) {
     return null
   }
@@ -359,10 +391,38 @@ function toRange(startedAt: string, endedAt: string | null): Interval | null {
   return { startSec, endSec }
 }
 
-function toSecondsSinceMidnight(value: string) {
+function toSecondsSinceMidnight(value: string, timeContext: TimelineTimeContext) {
   const date = new Date(value)
-  const seconds = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds()
+  const shifted = new Date(date.getTime() + parseUtcOffsetMillis(timeContext.timezone))
+  const shiftedDate = shifted.toISOString().slice(0, 10)
+
+  if (shiftedDate < timeContext.date) {
+    return 0
+  }
+
+  if (shiftedDate > timeContext.date) {
+    return DAY_SECONDS
+  }
+
+  const seconds =
+    shifted.getUTCHours() * 3600 +
+    shifted.getUTCMinutes() * 60 +
+    shifted.getUTCSeconds()
+
   return Math.max(0, Math.min(seconds, DAY_SECONDS))
+}
+
+function parseUtcOffsetMillis(value: string) {
+  const match = value.match(/^([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/)
+  if (!match) {
+    return 0
+  }
+
+  const [, sign, hours, minutes, seconds = '0'] = match
+  const totalSeconds =
+    Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
+
+  return (sign === '-' ? -1 : 1) * totalSeconds * 1000
 }
 
 function formatClock(seconds: number) {

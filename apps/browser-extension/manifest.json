@@ -10,11 +10,24 @@
     "storage"
   ],
   "host_permissions": [
-    "http://127.0.0.1:46215/*"
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
   "action": {
     "default_title": "timeline"
   }
