@@ -188,24 +188,26 @@ export function TimelineChart(props: {
           </strong>
         </div>
 
-        {hoveredSec !== null ? (
-          <div className="timeline-inspector-summary">
-            <span className="timeline-inspector-time">{formatClock(hoveredSec)}</span>
-            <div className="timeline-inspector-items">
-              {inspectionItems.length > 0 ? (
-                inspectionItems.map((item) => (
-                  <span key={item.id} className="timeline-inspector-item" title={item.detail}>
-                    <i style={{ backgroundColor: item.color }} />
-                    <strong>{item.label}</strong>
-                    <small>{item.typeLabel}</small>
-                  </span>
-                ))
-              ) : (
-                <span className="timeline-inspector-empty">该时刻没有记录</span>
-              )}
-            </div>
+        <div className={`timeline-inspector-summary ${hoveredSec === null ? 'is-idle' : ''}`}>
+          <span className="timeline-inspector-time">
+            {hoveredSec === null ? '--:--' : formatClock(hoveredSec)}
+          </span>
+          <div className="timeline-inspector-items">
+            {hoveredSec !== null && inspectionItems.length > 0 ? (
+              inspectionItems.map((item) => (
+                <span key={item.id} className="timeline-inspector-item" title={item.detail}>
+                  <i style={{ backgroundColor: item.color }} />
+                  <strong>{item.label}</strong>
+                  <small>{item.typeLabel}</small>
+                </span>
+              ))
+            ) : (
+              <span className="timeline-inspector-empty">
+                {hoveredSec === null ? '移动到时间线查看详情' : '该时刻没有记录'}
+              </span>
+            )}
           </div>
-        ) : null}
+        </div>
       </div>
 
       <div className="timeline-waterfall">

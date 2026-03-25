@@ -1358,11 +1358,19 @@ function formatWeeklyAxisTick(seconds: number) {
 }
 
 function formatZoomPreset(hours: number) {
-  if (hours < 1) {
-    return `${Math.round(hours * 60)} 分钟`
+  const totalMinutes = Math.max(1, Math.round(hours * 60))
+  if (totalMinutes < 60) {
+    return `${totalMinutes} 分钟`
   }
 
-  return `${hours} 小时`
+  const wholeHours = Math.floor(totalMinutes / 60)
+  const remainingMinutes = totalMinutes % 60
+
+  if (remainingMinutes === 0) {
+    return `${wholeHours} 小时`
+  }
+
+  return `${wholeHours} 小时 ${remainingMinutes} 分钟`
 }
 
 function buildVisibleFocusItems(
