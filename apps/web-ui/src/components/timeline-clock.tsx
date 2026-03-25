@@ -10,8 +10,9 @@ const CLOCK_CENTER = CLOCK_SIZE / 2
 const OUTER_RING_RADIUS = 116
 const INNER_RING_RADIUS = 100
 const WINDOW_RING_RADIUS = 84
+const CONTROL_RING_RADIUS = 106
 
-type DragMode = 'start' | 'end' | 'move' | null
+type DragMode = 'resize' | 'move' | null
 
 export function TimelineClock(props: {
     focusSegments: ChartSegment[]
@@ -25,6 +26,9 @@ export function TimelineClock(props: {
     const svgRef = useRef<SVGSVGElement | null>(null)
     const dragModeRef = useRef<DragMode>(null)
     const moveCenterOffsetRef = useRef(0)
+    const resizeCenterSecRef = useRef(0)
+    const dragLastRawSecRef = useRef(0)
+    const dragWrapOffsetRef = useRef(0)
     const [isDragging, setIsDragging] = useState(false)
 
     const focusArcs = useMemo(
@@ -37,8 +41,9 @@ export function TimelineClock(props: {
     )
 
     const windowDuration = Math.max(0, props.viewEndSec - props.viewStartSec)
-    const startPoint = pointAtSec(props.viewStartSec, WINDOW_RING_RADIUS)
-    const endPoint = pointAtSec(props.viewEndSec, WINDOW_RING_RADIUS)
+    const windowCenterSec = (props.viewStartSec + props.viewEndSec) / 2
+    const resizeHandlePoint = pointAtSec(windowCenterSec, CONTROL_RING_RADIUS)
+    const moveHandlePoint = pointAtSec((windowCenterSec + DAY_SECONDS / 2) % DAY_SECONDS, CONTROL_RING_RADIUS)
 
     useEffect(() => {
         function handlePointerMove(event: PointerEvent) {
@@ -48,33 +53,35 @@ export function TimelineClock(props: {
                 return
             }
 
-            const nextSec = snapToStep(secFromPointer(event.clientX, event.clientY, svg))
-            const start = props.viewStartSec
-            const end = props.viewEndSec
-
+            const rawSec = secFromPointer(event.clientX, event.clientY, svg)
+            const continuousSec = toContinuousSec(rawSec, dragLastRawSecRef, dragWrapOffsetRef)
+            const nextSec = snapToStep(continuousSec)
             if (mode === 'move') {
-                const centerSec = clamp(nextSec + moveCenterOffsetRef.current, 0, DAY_SECONDS)
+                const centerSec = normalizeSec(nextSec + moveCenterOffsetRef.current)
                 const half = windowDuration / 2
                 const nextStart = clamp(centerSec - half, 0, DAY_SECONDS - windowDuration)
                 props.onWindowChange(nextStart, nextStart + windowDuration)
                 return
             }
 
-            if (mode === 'start') {
-                const minStart = Math.max(0, end - props.maxViewSec)
-                const maxStart = Math.max(0, end - props.minViewSec)
-                props.onWindowChange(clamp(nextSec, minStart, maxStart), end)
-                return
-            }
-
-            const minEnd = Math.min(DAY_SECONDS, start + props.minViewSec)
-            const maxEnd = Math.min(DAY_SECONDS, start + props.maxViewSec)
-            props.onWindowChange(start, clamp(nextSec, minEnd, maxEnd))
+            const resizeCenterSec = resizeCenterSecRef.current
+            const halfDuration = Math.abs(nextSec - resizeCenterSec)
+            const maxSymmetricDuration = Math.max(
+                props.minViewSec,
+                Math.min(
+                    props.maxViewSec,
+                    2 * Math.min(resizeCenterSec, DAY_SECONDS - resizeCenterSec),
+                ),
+            )
+            const duration = clamp(snapToStep(halfDuration * 2), props.minViewSec, maxSymmetricDuration)
+            const nextStart = resizeCenterSec - duration / 2
+            props.onWindowChange(nextStart, nextStart + duration)
         }
 
         function handlePointerUp() {
             dragModeRef.current = null
             moveCenterOffsetRef.current = 0
+            dragWrapOffsetRef.current = 0
             setIsDragging(false)
         }
 
@@ -96,14 +103,23 @@ export function TimelineClock(props: {
         props.viewStartSec,
     ])
 
-    function beginHandleDrag(event: ReactPointerEvent<SVGCircleElement>, mode: DragMode) {
+    function beginResizeDrag(event: ReactPointerEvent<SVGCircleElement>) {
         event.preventDefault()
         event.stopPropagation()
-        dragModeRef.current = mode
+        const svg = svgRef.current
+        if (!svg) {
+            return
+        }
+        const rawSec = secFromPointer(event.clientX, event.clientY, svg)
+        dragLastRawSecRef.current = rawSec
+        dragWrapOffsetRef.current = 0
+        const centerSec = (props.viewStartSec + props.viewEndSec) / 2
+        resizeCenterSecRef.current = nearestEquivalentSec(centerSec, rawSec)
+        dragModeRef.current = 'resize'
         setIsDragging(true)
     }
 
-    function beginWindowDrag(event: ReactPointerEvent<SVGPathElement>) {
+    function beginMoveDrag(event: ReactPointerEvent<SVGElement>) {
         event.preventDefault()
         event.stopPropagation()
         const svg = svgRef.current
@@ -111,7 +127,9 @@ export function TimelineClock(props: {
             return
         }
 
-        const pointerSec = snapToStep(secFromPointer(event.clientX, event.clientY, svg))
+        const pointerSec = secFromPointer(event.clientX, event.clientY, svg)
+        dragLastRawSecRef.current = pointerSec
+        dragWrapOffsetRef.current = 0
         const centerSec = (props.viewStartSec + props.viewEndSec) / 2
         moveCenterOffsetRef.current = centerSec - pointerSec
         dragModeRef.current = 'move'
@@ -127,6 +145,22 @@ export function TimelineClock(props: {
                     className="timeline-clock-svg"
                 >
                     <circle cx={CLOCK_CENTER} cy={CLOCK_CENTER} r={124} className="timeline-clock-base" />
+
+                    <circle
+                        cx={CLOCK_CENTER}
+                        cy={CLOCK_CENTER}
+                        r={106}
+                        className="timeline-clock-move-hit-ring"
+                        onPointerDown={beginMoveDrag}
+                    />
+
+                    <circle
+                        cx={CLOCK_CENTER}
+                        cy={CLOCK_CENTER}
+                        r={72}
+                        className="timeline-clock-center-hit"
+                        onPointerDown={beginMoveDrag}
+                    />
 
                     {buildHourTicks().map((tick) => (
                         <line
@@ -162,42 +196,55 @@ export function TimelineClock(props: {
                     <path
                         d={arcPath(props.viewStartSec, props.viewEndSec, WINDOW_RING_RADIUS)}
                         className="timeline-clock-window-arc"
-                        onPointerDown={beginWindowDrag}
                     />
 
                     <path
                         d={arcPath(props.viewStartSec, props.viewEndSec, WINDOW_RING_RADIUS)}
                         className="timeline-clock-window-hit-arc"
-                        onPointerDown={beginWindowDrag}
+                    />
+
+                    <line
+                        x1={resizeHandlePoint.x}
+                        y1={resizeHandlePoint.y}
+                        x2={moveHandlePoint.x}
+                        y2={moveHandlePoint.y}
+                        className="timeline-clock-diameter"
                     />
 
                     <circle
-                        cx={startPoint.x}
-                        cy={startPoint.y}
-                        r={6}
-                        className="timeline-clock-handle"
-                        onPointerDown={(event) => beginHandleDrag(event, 'start')}
+                        cx={CLOCK_CENTER}
+                        cy={CLOCK_CENTER}
+                        r={3.5}
+                        className="timeline-clock-origin-dot"
+                    />
+
+                    <circle
+                        cx={resizeHandlePoint.x}
+                        cy={resizeHandlePoint.y}
+                        r={8}
+                        className="timeline-clock-handle is-resize"
+                        onPointerDown={beginResizeDrag}
                     />
                     <circle
-                        cx={startPoint.x}
-                        cy={startPoint.y}
-                        r={16}
-                        className="timeline-clock-handle-hit"
-                        onPointerDown={(event) => beginHandleDrag(event, 'start')}
+                        cx={resizeHandlePoint.x}
+                        cy={resizeHandlePoint.y}
+                        r={24}
+                        className="timeline-clock-handle-hit is-resize-hit"
+                        onPointerDown={beginResizeDrag}
                     />
                     <circle
-                        cx={endPoint.x}
-                        cy={endPoint.y}
-                        r={6}
-                        className="timeline-clock-handle"
-                        onPointerDown={(event) => beginHandleDrag(event, 'end')}
+                        cx={moveHandlePoint.x}
+                        cy={moveHandlePoint.y}
+                        r={8}
+                        className="timeline-clock-handle is-move"
+                        onPointerDown={beginMoveDrag}
                     />
                     <circle
-                        cx={endPoint.x}
-                        cy={endPoint.y}
-                        r={16}
-                        className="timeline-clock-handle-hit"
-                        onPointerDown={(event) => beginHandleDrag(event, 'end')}
+                        cx={moveHandlePoint.x}
+                        cy={moveHandlePoint.y}
+                        r={24}
+                        className="timeline-clock-handle-hit is-move-hit"
+                        onPointerDown={beginMoveDrag}
                     />
 
                     {buildHourLabels().map((label) => (
@@ -213,11 +260,16 @@ export function TimelineClock(props: {
                         </text>
                     ))}
                 </svg>
+            </div>
 
+            <div className="timeline-clock-footer">
                 <div className="timeline-clock-center">
                     <strong>{formatClock(props.viewStartSec)} - {formatClock(props.viewEndSec)}</strong>
                     <small>{formatDuration(windowDuration)}</small>
                 </div>
+                <p className="timeline-clock-instruction">
+                    操作说明：上端拖动调窗口大小；对端拖动调窗口位置。
+                </p>
             </div>
         </div>
     )
@@ -320,4 +372,34 @@ function snapToStep(seconds: number) {
 
 function clamp(value: number, min: number, max: number) {
     return Math.max(min, Math.min(value, max))
+}
+
+function normalizeSec(seconds: number) {
+    const mod = seconds % DAY_SECONDS
+    return mod < 0 ? mod + DAY_SECONDS : mod
+}
+
+function toContinuousSec(rawSec: number, lastRawRef: { current: number }, wrapOffsetRef: { current: number }) {
+    const delta = rawSec - lastRawRef.current
+    if (delta > DAY_SECONDS / 2) {
+        wrapOffsetRef.current -= DAY_SECONDS
+    } else if (delta < -DAY_SECONDS / 2) {
+        wrapOffsetRef.current += DAY_SECONDS
+    }
+    lastRawRef.current = rawSec
+    return rawSec + wrapOffsetRef.current
+}
+
+function nearestEquivalentSec(baseSec: number, aroundSec: number) {
+    const candidates = [baseSec - DAY_SECONDS, baseSec, baseSec + DAY_SECONDS]
+    let best = candidates[0]
+    let bestDistance = Math.abs(candidates[0] - aroundSec)
+    for (let index = 1; index < candidates.length; index += 1) {
+        const distance = Math.abs(candidates[index] - aroundSec)
+        if (distance < bestDistance) {
+            best = candidates[index]
+            bestDistance = distance
+        }
+    }
+    return best
 }
