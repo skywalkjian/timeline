@@ -1050,6 +1050,13 @@
   font-size: 0.68rem;
 }
 
+.settings-config-help {
+  color: #6f819c;
+  font-family: var(--mono-family);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
 .settings-config-field input,
 .settings-config-field textarea {
   width: 100%;
@@ -1073,11 +1080,22 @@
 
 .settings-config-check {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   color: var(--text-main);
   font-family: var(--mono-family);
   font-size: 0.74rem;
+}
+
+.settings-config-check > span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-config-check small {
+  color: #6f819c;
+  font-size: 0.66rem;
+  line-height: 1.4;
 }
 
 .settings-config-actions {

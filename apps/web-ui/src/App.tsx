@@ -1031,12 +1031,28 @@ function SettingsPage(props: {
       return
     }
 
-    setIdleThresholdSecs(props.agentSettings.idle_threshold_secs)
-    setPollIntervalMillis(props.agentSettings.poll_interval_millis)
-    setRecordWindowTitles(props.agentSettings.record_window_titles)
-    setRecordPageTitles(props.agentSettings.record_page_titles)
-    setIgnoredAppsText(props.agentSettings.ignored_apps.join('\n'))
-    setIgnoredDomainsText(props.agentSettings.ignored_domains.join('\n'))
+    setIdleThresholdSecs(
+      Number.isFinite(props.agentSettings.idle_threshold_secs)
+        ? props.agentSettings.idle_threshold_secs
+        : 300,
+    )
+    setPollIntervalMillis(
+      Number.isFinite(props.agentSettings.poll_interval_millis)
+        ? props.agentSettings.poll_interval_millis
+        : 1000,
+    )
+    setRecordWindowTitles(Boolean(props.agentSettings.record_window_titles))
+    setRecordPageTitles(Boolean(props.agentSettings.record_page_titles))
+    setIgnoredAppsText(
+      Array.isArray(props.agentSettings.ignored_apps)
+        ? props.agentSettings.ignored_apps.join('\n')
+        : '',
+    )
+    setIgnoredDomainsText(
+      Array.isArray(props.agentSettings.ignored_domains)
+        ? props.agentSettings.ignored_domains.join('\n')
+        : '',
+    )
   }, [props.agentSettings])
 
   async function handleSaveConfig() {
@@ -1142,6 +1158,9 @@ function SettingsPage(props: {
                   value={idleThresholdSecs}
                   onChange={(event) => setIdleThresholdSecs(Number(event.target.value) || 0)}
                 />
+                <small className="settings-config-help">
+                  超过该时长无键盘/鼠标输入将判定为 Idle，建议 60~120 秒。
+                </small>
               </label>
 
               <label className="settings-config-field">
@@ -1154,6 +1173,9 @@ function SettingsPage(props: {
                   value={pollIntervalMillis}
                   onChange={(event) => setPollIntervalMillis(Number(event.target.value) || 0)}
                 />
+                <small className="settings-config-help">
+                  越小越实时但资源占用更高；建议保持 500~1500 毫秒。
+                </small>
               </label>
 
               <label className="settings-config-check">
@@ -1162,7 +1184,10 @@ function SettingsPage(props: {
                   checked={recordWindowTitles}
                   onChange={(event) => setRecordWindowTitles(event.target.checked)}
                 />
-                记录窗口标题
+                <span>
+                  记录窗口标题
+                  <small>用于更细粒度窗口识别，关闭可减少隐私暴露。</small>
+                </span>
               </label>
 
               <label className="settings-config-check">
@@ -1171,7 +1196,10 @@ function SettingsPage(props: {
                   checked={recordPageTitles}
                   onChange={(event) => setRecordPageTitles(event.target.checked)}
                 />
-                记录页面标题
+                <span>
+                  记录页面标题
+                  <small>浏览器页面将保留标题，关闭后仅记录域名。</small>
+                </span>
               </label>
 
               <label className="settings-config-field is-wide">
@@ -1181,6 +1209,9 @@ function SettingsPage(props: {
                   value={ignoredAppsText}
                   onChange={(event) => setIgnoredAppsText(event.target.value)}
                 />
+                <small className="settings-config-help">
+                  命中列表的应用将不写入焦点记录，支持换行或逗号分隔。
+                </small>
               </label>
 
               <label className="settings-config-field is-wide">
@@ -1190,6 +1221,9 @@ function SettingsPage(props: {
                   value={ignoredDomainsText}
                   onChange={(event) => setIgnoredDomainsText(event.target.value)}
                 />
+                <small className="settings-config-help">
+                  命中列表的域名不会进入浏览器记录，适合排除隐私或噪声站点。
+                </small>
               </label>
 
               <div className="settings-config-actions">

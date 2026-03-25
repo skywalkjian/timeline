@@ -165,7 +165,19 @@ export function getFocusStats(date: string) {
 }
 
 export function getAgentSettings() {
-  return request<AgentSettingsResponse>('/api/settings')
+  return request<AgentSettingsResponse>('/api/settings').then((raw) => ({
+    ...raw,
+    idle_threshold_secs:
+      typeof raw.idle_threshold_secs === 'number' ? raw.idle_threshold_secs : 300,
+    poll_interval_millis:
+      typeof raw.poll_interval_millis === 'number' ? raw.poll_interval_millis : 1000,
+    record_window_titles:
+      typeof raw.record_window_titles === 'boolean' ? raw.record_window_titles : true,
+    record_page_titles:
+      typeof raw.record_page_titles === 'boolean' ? raw.record_page_titles : true,
+    ignored_apps: Array.isArray(raw.ignored_apps) ? raw.ignored_apps : [],
+    ignored_domains: Array.isArray(raw.ignored_domains) ? raw.ignored_domains : [],
+  }))
 }
 
 export async function updateAutostart(payload: UpdateAutostartRequest) {
