@@ -115,6 +115,9 @@ WHERE last_seen_at IS NULL;
     },
 ];
 
+/// Keep recent raw events for local debugging while capping unbounded DB growth.
+const RAW_EVENTS_MAX_ROWS: i64 = 50_000;
+
 impl AgentStore {
     pub async fn connect(config: &AppConfig) -> Result<Self> {
         config.ensure_parent_dirs()?;
@@ -141,7 +144,11 @@ impl AgentStore {
     /// all three tables are updated atomically — a partial failure won't leave
     /// inconsistent state across segment types.
     pub async fn restore_unclosed_segments(&self) -> Result<()> {
-        let mut tx = self.pool.begin().await.context("failed to begin transaction")?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .context("failed to begin transaction")?;
 
         sqlx::query(
             "UPDATE focus_segments SET ended_at = COALESCE(last_seen_at, started_at) WHERE ended_at IS NULL",
@@ -159,7 +166,9 @@ impl AgentStore {
             .execute(&mut *tx)
             .await?;
 
-        tx.commit().await.context("failed to commit restore_unclosed_segments")?;
+        tx.commit()
+            .await
+            .context("failed to commit restore_unclosed_segments")?;
         Ok(())
     }
 
@@ -364,6 +373,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
         .execute(&self.pool)
         .await?;
 
+        sqlx::query("DELETE FROM raw_events WHERE id <= (SELECT MAX(id) - ? FROM raw_events)")
+            .bind(RAW_EVENTS_MAX_ROWS)
+            .execute(&self.pool)
+            .await?;
+
         Ok(())
     }
 
@@ -560,14 +574,14 @@ ORDER BY started_at ASC
 
     /// Aggregates a single day's segments into a compact summary for calendar
     /// and overview card display.
-    pub async fn read_day_summary(
-        &self,
-        date: Date,
-        timezone: UtcOffset,
-    ) -> Result<DaySummary> {
+    pub async fn read_day_summary(&self, date: Date, timezone: UtcOffset) -> Result<DaySummary> {
         let timeline = self.read_day_timeline(date, timezone).await?;
 
-        let focus_seconds: i64 = timeline.focus_segments.iter().map(segment_seconds_focus).sum();
+        let focus_seconds: i64 = timeline
+            .focus_segments
+            .iter()
+            .map(segment_seconds_focus)
+            .sum();
         let active_seconds: i64 = timeline
             .presence_segments
             .iter()
@@ -612,8 +626,8 @@ ORDER BY started_at ASC
         month: time::Month,
         timezone: UtcOffset,
     ) -> Result<MonthCalendarResponse> {
-        let first_day = Date::from_calendar_date(year, month, 1)
-            .map_err(|e| anyhow!("invalid month: {e}"))?;
+        let first_day =
+            Date::from_calendar_date(year, month, 1).map_err(|e| anyhow!("invalid month: {e}"))?;
         let days_in_month = days_in_month(year, month);
 
         let mut days = Vec::with_capacity(days_in_month as usize);
@@ -646,18 +660,18 @@ ORDER BY started_at ASC
         let weekday_offset = anchor_date.weekday().number_days_from_monday() as i64;
         let week_start = anchor_date - Duration::days(weekday_offset);
         let week_end = week_start + Duration::days(6);
-        let week = self.aggregate_period(week_start, week_end, timezone).await?;
+        let week = self
+            .aggregate_period(week_start, week_end, timezone)
+            .await?;
 
         // Natural month.
-        let month_start = Date::from_calendar_date(
-            anchor_date.year(),
-            anchor_date.month(),
-            1,
-        )
-        .map_err(|e| anyhow!("invalid month start: {e}"))?;
+        let month_start = Date::from_calendar_date(anchor_date.year(), anchor_date.month(), 1)
+            .map_err(|e| anyhow!("invalid month start: {e}"))?;
         let month_days = days_in_month(anchor_date.year(), anchor_date.month());
         let month_end = month_start + Duration::days(month_days as i64 - 1);
-        let month = self.aggregate_period(month_start, month_end, timezone).await?;
+        let month = self
+            .aggregate_period(month_start, month_end, timezone)
+            .await?;
 
         Ok(PeriodSummaryResponse {
             date: anchor_date.to_string(),
@@ -674,16 +688,71 @@ ORDER BY started_at ASC
         end: Date,
         timezone: UtcOffset,
     ) -> Result<PeriodStat> {
-        let mut focus_seconds = 0i64;
-        let mut active_seconds = 0i64;
-        let mut current = start;
+        let start_local =
+            PrimitiveDateTime::new(start, time::Time::MIDNIGHT).assume_offset(timezone);
+        let end_next_day = end
+            .next_day()
+            .ok_or_else(|| anyhow!("period end date overflow"))?;
+        let end_local =
+            PrimitiveDateTime::new(end_next_day, time::Time::MIDNIGHT).assume_offset(timezone);
 
-        while current <= end {
-            let summary = self.read_day_summary(current, timezone).await?;
-            focus_seconds += summary.focus_seconds;
-            active_seconds += summary.active_seconds;
-            current = current.next_day().unwrap_or(current);
-        }
+        let period_start_utc = start_local.to_offset(UtcOffset::UTC);
+        let period_end_utc = end_local.to_offset(UtcOffset::UTC);
+        let now_utc = OffsetDateTime::now_utc();
+
+        let period_start_text = format_time(period_start_utc)?;
+        let period_end_text = format_time(period_end_utc)?;
+        let now_text = format_time(now_utc)?;
+
+        let focus_seconds: i64 = sqlx::query_scalar(
+            r#"
+SELECT COALESCE(SUM(
+    CASE
+        WHEN strftime('%s', MIN(COALESCE(ended_at, ?), ?)) > strftime('%s', MAX(started_at, ?))
+            THEN strftime('%s', MIN(COALESCE(ended_at, ?), ?)) - strftime('%s', MAX(started_at, ?))
+        ELSE 0
+    END
+), 0)
+FROM focus_segments
+WHERE started_at < ? AND COALESCE(ended_at, ?) > ?
+"#,
+        )
+        .bind(&now_text)
+        .bind(&period_end_text)
+        .bind(&period_start_text)
+        .bind(&now_text)
+        .bind(&period_end_text)
+        .bind(&period_start_text)
+        .bind(&period_end_text)
+        .bind(&now_text)
+        .bind(&period_start_text)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let active_seconds: i64 = sqlx::query_scalar(
+            r#"
+SELECT COALESCE(SUM(
+    CASE
+        WHEN strftime('%s', MIN(COALESCE(ended_at, ?), ?)) > strftime('%s', MAX(started_at, ?))
+            THEN strftime('%s', MIN(COALESCE(ended_at, ?), ?)) - strftime('%s', MAX(started_at, ?))
+        ELSE 0
+    END
+), 0)
+FROM presence_segments
+WHERE state = 'active' AND started_at < ? AND COALESCE(ended_at, ?) > ?
+"#,
+        )
+        .bind(&now_text)
+        .bind(&period_end_text)
+        .bind(&period_start_text)
+        .bind(&now_text)
+        .bind(&period_end_text)
+        .bind(&period_start_text)
+        .bind(&period_end_text)
+        .bind(&now_text)
+        .bind(&period_start_text)
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(PeriodStat {
             focus_seconds,
@@ -765,7 +834,10 @@ fn parse_segment_bounds(
         None => now_utc,
     };
 
-    Ok((clamp_start(started_at, day_start), clamp_end(ended_at, day_end, day_start)))
+    Ok((
+        clamp_start(started_at, day_start),
+        clamp_end(ended_at, day_end, day_start),
+    ))
 }
 
 /// Converts a local-time `Date` + `UtcOffset` into a pair of UTC timestamps

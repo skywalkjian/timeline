@@ -10,9 +10,12 @@ const AGENT_BASE_URL_STORAGE_KEY = 'agent-base-url'
 const DEFAULT_AGENT_BASE_URLS = ['http://127.0.0.1:46215', 'http://localhost:46215']
 const HEARTBEAT_ALARM = 'timeline-heartbeat'
 const FOLLOW_UP_DELAYS_MS = [250, 1200, 4000]
+const REPORT_DEDUP_WINDOW_MS = 1800
 const activeTabsByWindow = new Map()
 let focusedWindowId = chrome.windows.WINDOW_ID_NONE
 let followUpTimers = []
+let lastReportSignature = null
+let lastReportAtMs = 0
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureHeartbeat()
@@ -173,6 +176,10 @@ async function reportTab(tab, reason) {
     return
   }
 
+  if (shouldSkipDuplicateReport(payload, reason)) {
+    return
+  }
+
   const agentBaseUrls = await getAgentBaseUrls()
 
   for (const agentBaseUrl of agentBaseUrls) {
@@ -315,6 +322,24 @@ async function postBrowserEvent(agentBaseUrl, payload) {
       error,
     }
   }
+}
+
+function shouldSkipDuplicateReport(payload, reason) {
+  // Keep heartbeat authoritative; only throttle bursty follow-up retries and UI events.
+  if (reason === 'heartbeat') {
+    return false
+  }
+
+  const signature = `${payload.domain}|${payload.browser_window_id}|${payload.tab_id}`
+  const now = Date.now()
+
+  const isDuplicateBurst =
+    lastReportSignature === signature && now - lastReportAtMs < REPORT_DEDUP_WINDOW_MS
+
+  lastReportSignature = signature
+  lastReportAtMs = now
+
+  return isDuplicateBurst
 }
 
 function uniqueValues(values) {

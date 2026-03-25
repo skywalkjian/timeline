@@ -1,12 +1,14 @@
 //! Background polling loops that turn Windows observations into persisted segments.
 
-use crate::state::{AgentState, OpenBrowserSegment, OpenFocusSegment, OpenPresenceSegment};
+use crate::state::{
+    AgentState, OpenBrowserSegment, OpenFocusSegment, OpenPresenceSegment, RuntimeConfigSnapshot,
+};
 use crate::windows::{ForegroundWindowSnapshot, capture_foreground_window, detect_presence};
 use anyhow::Result;
 use common::{AppInfo, PresenceState};
 use std::time::Duration;
 use time::OffsetDateTime;
-use tokio::time::{MissedTickBehavior, interval};
+use tokio::time::sleep;
 use tracing::{error, warn};
 
 pub fn spawn_trackers(state: AgentState) {
@@ -25,39 +27,39 @@ pub fn spawn_trackers(state: AgentState) {
 }
 
 async fn run_focus_tracker(state: AgentState) -> Result<()> {
-    let mut ticker = interval(Duration::from_millis(state.config().poll_interval_millis));
-    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
     loop {
-        ticker.tick().await;
+        let runtime_config = state.runtime_config_snapshot().await;
         let observed_at = OffsetDateTime::now_utc();
         state.mark_focus_online(observed_at).await;
 
         match capture_foreground_window() {
-            Ok(snapshot) => sync_focus_snapshot(&state, snapshot, observed_at).await?,
+            Ok(snapshot) => {
+                sync_focus_snapshot(&state, snapshot, observed_at, &runtime_config).await?
+            }
             Err(error) => warn!(?error, "failed to read foreground window"),
         }
+
+        sleep(Duration::from_millis(runtime_config.poll_interval_millis)).await;
     }
 }
 
 async fn run_presence_tracker(state: AgentState) -> Result<()> {
-    let mut ticker = interval(Duration::from_millis(state.config().poll_interval_millis));
-    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
     loop {
-        ticker.tick().await;
+        let runtime_config = state.runtime_config_snapshot().await;
         let observed_at = OffsetDateTime::now_utc();
         state.mark_presence_online(observed_at).await;
         let presence =
-            match detect_presence(Duration::from_secs(state.config().idle_threshold_secs)) {
+            match detect_presence(Duration::from_secs(runtime_config.idle_threshold_secs)) {
                 Ok(value) => value,
                 Err(error) => {
                     warn!(?error, "failed to read presence state");
+                    sleep(Duration::from_millis(runtime_config.poll_interval_millis)).await;
                     continue;
                 }
             };
 
         sync_presence_state(&state, presence, observed_at).await?;
+        sleep(Duration::from_millis(runtime_config.poll_interval_millis)).await;
     }
 }
 
@@ -74,6 +76,7 @@ async fn sync_focus_snapshot(
     state: &AgentState,
     snapshot: Option<ForegroundWindowSnapshot>,
     observed_at: OffsetDateTime,
+    runtime_config: &RuntimeConfigSnapshot,
 ) -> Result<()> {
     let next_fingerprint = snapshot.as_ref().map(ForegroundWindowSnapshot::fingerprint);
     let mut runtime = state.runtime().await;
@@ -121,7 +124,7 @@ async fn sync_focus_snapshot(
     }
 
     if let Some(snapshot) = snapshot {
-        if is_ignored_app(state, &snapshot.process_name) {
+        if is_ignored_app(runtime_config, &snapshot.process_name) {
             return Ok(());
         }
 
@@ -130,7 +133,7 @@ async fn sync_focus_snapshot(
             process_name: snapshot.process_name.clone(),
             display_name: display_name.clone(),
             exe_path: Some(snapshot.exe_path.clone()),
-            window_title: if state.config().record_window_titles {
+            window_title: if runtime_config.record_window_titles {
                 snapshot.window_title.clone()
             } else {
                 None
@@ -216,6 +219,7 @@ pub async fn sync_browser_event(
     payload: common::BrowserEventPayload,
     observed_at: OffsetDateTime,
 ) -> Result<common::BrowserEventAck> {
+    let runtime_config = state.runtime_config_snapshot().await;
     let mut runtime = state.runtime().await;
     state.mark_browser_online(observed_at).await;
     state
@@ -223,7 +227,7 @@ pub async fn sync_browser_event(
         .append_raw_event("browser_event", &payload, observed_at)
         .await?;
 
-    if is_ignored_domain(state, &payload.domain) {
+    if is_ignored_domain(&runtime_config, &payload.domain) {
         if let Some(current) = runtime.current_browser.take() {
             state
                 .store()
@@ -287,7 +291,7 @@ pub async fn sync_browser_event(
     }
 
     let payload = common::BrowserEventPayload {
-        page_title: if state.config().record_page_titles {
+        page_title: if runtime_config.record_page_titles {
             payload.page_title
         } else {
             None
@@ -312,17 +316,15 @@ pub async fn sync_browser_event(
     })
 }
 
-fn is_ignored_app(state: &AgentState, process_name: &str) -> bool {
-    state
-        .config()
+fn is_ignored_app(runtime_config: &RuntimeConfigSnapshot, process_name: &str) -> bool {
+    runtime_config
         .ignored_apps
         .iter()
         .any(|candidate| candidate.eq_ignore_ascii_case(process_name))
 }
 
-fn is_ignored_domain(state: &AgentState, domain: &str) -> bool {
-    state
-        .config()
+fn is_ignored_domain(runtime_config: &RuntimeConfigSnapshot, domain: &str) -> bool {
+    runtime_config
         .ignored_domains
         .iter()
         .any(|candidate| candidate.eq_ignore_ascii_case(domain))

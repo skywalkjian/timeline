@@ -1,6 +1,6 @@
 /* ActivityWatch-inspired multi-page dashboard for stats, timeline, and settings. */
 
-import { memo, startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, memo, startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   API_BASE_URL,
@@ -16,10 +16,6 @@ import {
   type PeriodSummaryResponse,
   type TimelineDayResponse,
 } from './api'
-import { CalendarGrid } from './components/calendar-grid'
-import { CompactDonutChart, DonutChart } from './components/donut-chart'
-import { TimelineClock } from './components/timeline-clock'
-import { TimelineChart } from './components/timeline-chart'
 import {
   buildDashboardModel,
   formatClockRange,
@@ -39,6 +35,31 @@ const PAGE_ITEMS = [
 ] as const
 
 type AppPage = (typeof PAGE_ITEMS)[number]['id']
+
+const CalendarGrid = lazy(async () => {
+  const module = await import('./components/calendar-grid')
+  return { default: module.CalendarGrid }
+})
+
+const DonutChart = lazy(async () => {
+  const module = await import('./components/donut-chart')
+  return { default: module.DonutChart }
+})
+
+const CompactDonutChart = lazy(async () => {
+  const module = await import('./components/donut-chart')
+  return { default: module.CompactDonutChart }
+})
+
+const TimelineClock = lazy(async () => {
+  const module = await import('./components/timeline-clock')
+  return { default: module.TimelineClock }
+})
+
+const TimelineChart = lazy(async () => {
+  const module = await import('./components/timeline-chart')
+  return { default: module.TimelineChart }
+})
 
 function App() {
   const [page, setPage] = useHashPage()
@@ -501,14 +522,16 @@ function StatsPage(props: {
             </div>
             <RefreshBadge active={props.isTimelineRefreshing} />
           </div>
-          <DonutChart
-            title="应用分布"
-            totalLabel={formatDuration(props.dashboard.summary.focusSeconds)}
-            slices={props.dashboard.appSlices}
-            filter={props.appFilter}
-            filterKind="app"
-            onSelect={props.setAppFilter}
-          />
+          <Suspense fallback={<div className="state-card">图表加载中…</div>}>
+            <DonutChart
+              title="应用分布"
+              totalLabel={formatDuration(props.dashboard.summary.focusSeconds)}
+              slices={props.dashboard.appSlices}
+              filter={props.appFilter}
+              filterKind="app"
+              onSelect={props.setAppFilter}
+            />
+          </Suspense>
         </div>
 
         <div className="panel page-panel stats-analysis-card">
@@ -518,14 +541,16 @@ function StatsPage(props: {
             </div>
             <RefreshBadge active={props.isTimelineRefreshing} />
           </div>
-          <DonutChart
-            title="域名分布"
-            totalLabel={formatDuration(sumSlices(props.dashboard.domainSlices))}
-            slices={props.dashboard.domainSlices}
-            filter={props.domainFilter}
-            filterKind="domain"
-            onSelect={props.setDomainFilter}
-          />
+          <Suspense fallback={<div className="state-card">图表加载中…</div>}>
+            <DonutChart
+              title="域名分布"
+              totalLabel={formatDuration(sumSlices(props.dashboard.domainSlices))}
+              slices={props.dashboard.domainSlices}
+              filter={props.domainFilter}
+              filterKind="domain"
+              onSelect={props.setDomainFilter}
+            />
+          </Suspense>
         </div>
 
         <div className="panel page-panel stats-calendar-card">
@@ -536,14 +561,16 @@ function StatsPage(props: {
             <RefreshBadge active={props.isCalendarRefreshing} />
           </div>
           {props.monthCalendar ? (
-            <CalendarGrid
-              month={props.calendarMonth}
-              days={props.monthCalendar.days}
-              selectedDate={props.selectedDate}
-              todayDate={props.agentToday}
-              onSelectDate={props.onSelectDate}
-              onMonthChange={props.onCalendarMonthChange}
-            />
+            <Suspense fallback={<div className="state-card">月历加载中…</div>}>
+              <CalendarGrid
+                month={props.calendarMonth}
+                days={props.monthCalendar.days}
+                selectedDate={props.selectedDate}
+                todayDate={props.agentToday}
+                onSelectDate={props.onSelectDate}
+                onMonthChange={props.onCalendarMonthChange}
+              />
+            </Suspense>
           ) : props.calendarError ? (
             <div className="state-card error-card">{props.calendarError}</div>
           ) : (
@@ -657,20 +684,22 @@ function FocusBalanceCard(props: {
       <div className="focus-distribution-layout">
         <div className="showcase-donut-wrap">
           <div className="showcase-compact-donut">
-            <CompactDonutChart
-              slices={presenceSlices}
-              totalLabel={formatDuration(selectedPresenceValue)}
-              secondaryLabel={selectedPresenceLabel}
-              footerLabel={`应用 ${formatDuration(props.dashboard.summary.focusSeconds)}`}
-              selectedKey={selectedPresenceKey}
-              onSelectKey={(key) => {
-                if (key === 'active' || key === 'idle' || key === 'locked') {
-                  setSelectedPresenceKey(key)
-                }
-              }}
-              height={232}
-              emptyLabel="所选日期没有状态分布数据"
-            />
+            <Suspense fallback={<div className="state-card">图表加载中…</div>}>
+              <CompactDonutChart
+                slices={presenceSlices}
+                totalLabel={formatDuration(selectedPresenceValue)}
+                secondaryLabel={selectedPresenceLabel}
+                footerLabel={`应用 ${formatDuration(props.dashboard.summary.focusSeconds)}`}
+                selectedKey={selectedPresenceKey}
+                onSelectKey={(key) => {
+                  if (key === 'active' || key === 'idle' || key === 'locked') {
+                    setSelectedPresenceKey(key)
+                  }
+                }}
+                height={232}
+                emptyLabel="所选日期没有状态分布数据"
+              />
+            </Suspense>
           </div>
         </div>
 
@@ -899,20 +928,41 @@ function TimelinePage(props: {
             </div>
 
             <div className="timeline-primary-chart">
-              <TimelineChart
-                rows={timelineRows}
+              <Suspense fallback={<div className="state-card">时间线加载中…</div>}>
+                <TimelineChart
+                  rows={timelineRows}
+                  viewStartSec={props.viewStartSec}
+                  viewEndSec={props.viewEndSec}
+                  baseDate={props.selectedDate}
+                  windowLabel={windowLabel}
+                  windowDurationLabel={`窗口 ${formatDuration(windowDurationSec)}`}
+                  windowItemCount={visibleFocusItems.length}
+                  highlightedSegmentId={hoveredFocusSegmentId}
+                  interactiveZoom={false}
+                  minViewHours={MIN_ZOOM_HOURS}
+                  maxViewHours={MAX_ZOOM_HOURS}
+                  onSegmentHover={setHoveredFocusSegmentId}
+                  onViewportChange={(nextStartSec, nextEndSec) => {
+                    const nextZoom = clampZoomHours(
+                      normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
+                    )
+                    const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
+                    props.setZoomHours(nextZoom)
+                    props.setViewStartHour(clampViewStart(nextStartHour, nextZoom))
+                  }}
+                />
+              </Suspense>
+            </div>
+
+            <Suspense fallback={<div className="state-card">时间环加载中…</div>}>
+              <TimelineClock
+                focusSegments={props.dashboard.focusSegments}
+                presenceSegments={props.dashboard.presenceSegments}
                 viewStartSec={props.viewStartSec}
                 viewEndSec={props.viewEndSec}
-                baseDate={props.selectedDate}
-                windowLabel={windowLabel}
-                windowDurationLabel={`窗口 ${formatDuration(windowDurationSec)}`}
-                windowItemCount={visibleFocusItems.length}
-                highlightedSegmentId={hoveredFocusSegmentId}
-                interactiveZoom={false}
-                minViewHours={MIN_ZOOM_HOURS}
-                maxViewHours={MAX_ZOOM_HOURS}
-                onSegmentHover={setHoveredFocusSegmentId}
-                onViewportChange={(nextStartSec, nextEndSec) => {
+                minViewSec={MIN_ZOOM_HOURS * 3600}
+                maxViewSec={MAX_ZOOM_HOURS * 3600}
+                onWindowChange={(nextStartSec, nextEndSec) => {
                   const nextZoom = clampZoomHours(
                     normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
                   )
@@ -921,24 +971,7 @@ function TimelinePage(props: {
                   props.setViewStartHour(clampViewStart(nextStartHour, nextZoom))
                 }}
               />
-            </div>
-
-            <TimelineClock
-              focusSegments={props.dashboard.focusSegments}
-              presenceSegments={props.dashboard.presenceSegments}
-              viewStartSec={props.viewStartSec}
-              viewEndSec={props.viewEndSec}
-              minViewSec={MIN_ZOOM_HOURS * 3600}
-              maxViewSec={MAX_ZOOM_HOURS * 3600}
-              onWindowChange={(nextStartSec, nextEndSec) => {
-                const nextZoom = clampZoomHours(
-                  normalizeZoomHours((nextEndSec - nextStartSec) / 3600),
-                )
-                const nextStartHour = normalizeZoomHours(nextStartSec / 3600)
-                props.setZoomHours(nextZoom)
-                props.setViewStartHour(clampViewStart(nextStartHour, nextZoom))
-              }}
-            />
+            </Suspense>
 
             <div className="timeline-snapshot-grid" role="list" aria-label="窗口摘要">
               <article className="timeline-snapshot-card" role="listitem">

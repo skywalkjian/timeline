@@ -135,6 +135,7 @@ async fn get_settings(
     State(state): State<AgentState>,
 ) -> Result<Json<ApiResponse<AgentSettingsResponse>>, AppError> {
     let autostart_enabled = system::autostart_enabled()?;
+    let runtime_config = state.runtime_config_snapshot().await;
     let monitors = build_monitor_statuses(&state).await;
 
     Ok(Json(ApiResponse::ok(AgentSettingsResponse {
@@ -142,12 +143,12 @@ async fn get_settings(
         tray_enabled: state.config().tray_enabled,
         web_ui_url: state.config().effective_web_ui_url(),
         launch_command: state.launch_command(),
-        idle_threshold_secs: state.config().idle_threshold_secs,
-        poll_interval_millis: state.config().poll_interval_millis,
-        record_window_titles: state.config().record_window_titles,
-        record_page_titles: state.config().record_page_titles,
-        ignored_apps: state.config().ignored_apps.clone(),
-        ignored_domains: state.config().ignored_domains.clone(),
+        idle_threshold_secs: runtime_config.idle_threshold_secs,
+        poll_interval_millis: runtime_config.poll_interval_millis,
+        record_window_titles: runtime_config.record_window_titles,
+        record_page_titles: runtime_config.record_page_titles,
+        ignored_apps: runtime_config.ignored_apps,
+        ignored_domains: runtime_config.ignored_domains,
         monitors,
     })))
 }
@@ -185,10 +186,11 @@ async fn post_update_agent_config(
     };
 
     next.save_to_path(config_path).map_err(AppError::internal)?;
+    state.replace_runtime_config(&next).await;
 
     Ok(Json(ApiResponse::ok(UpdateAgentConfigResponse {
         saved: true,
-        requires_restart: true,
+        requires_restart: false,
     })))
 }
 
@@ -356,9 +358,10 @@ async fn frontend_not_built() -> impl IntoResponse {
 
 async fn build_monitor_statuses(state: &AgentState) -> Vec<AgentMonitorStatus> {
     let now = OffsetDateTime::now_utc();
+    let runtime_config = state.runtime_config_snapshot().await;
     let telemetry = state.monitor_snapshot().await;
     // Focus/presence trackers are stale if no heartbeat arrives within 4 poll intervals.
-    let poll_window = Duration::milliseconds((state.config().poll_interval_millis * 4) as i64);
+    let poll_window = Duration::milliseconds((runtime_config.poll_interval_millis * 4) as i64);
     // Browser extension events are sporadic; allow up to 15 minutes before marking stale.
     let browser_window = Duration::minutes(15);
 

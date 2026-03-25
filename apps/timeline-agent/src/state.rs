@@ -7,7 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use time::{OffsetDateTime, UtcOffset};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 #[derive(Debug, Default)]
 pub struct RuntimeState {
@@ -45,12 +45,36 @@ pub struct OpenBrowserSegment {
     pub tab_id: i64,
 }
 
+#[derive(Debug, Clone)]
+pub struct RuntimeConfigSnapshot {
+    pub idle_threshold_secs: u64,
+    pub poll_interval_millis: u64,
+    pub record_window_titles: bool,
+    pub record_page_titles: bool,
+    pub ignored_apps: Vec<String>,
+    pub ignored_domains: Vec<String>,
+}
+
+impl RuntimeConfigSnapshot {
+    fn from_config(config: &AppConfig) -> Self {
+        Self {
+            idle_threshold_secs: config.idle_threshold_secs,
+            poll_interval_millis: config.poll_interval_millis,
+            record_window_titles: config.record_window_titles,
+            record_page_titles: config.record_page_titles,
+            ignored_apps: config.ignored_apps.clone(),
+            ignored_domains: config.ignored_domains.clone(),
+        }
+    }
+}
+
 pub struct AgentStateInner {
     pub config: AppConfig,
     pub config_path: Option<PathBuf>,
     pub store: AgentStore,
     pub started_at: OffsetDateTime,
     pub timezone: UtcOffset,
+    pub runtime_config: RwLock<RuntimeConfigSnapshot>,
     pub runtime: Mutex<RuntimeState>,
     pub monitors: Mutex<MonitorTelemetry>,
     pub shutdown_requested: AtomicBool,
@@ -71,6 +95,7 @@ impl AgentState {
         timezone: UtcOffset,
         shutdown_tx: tokio::sync::watch::Sender<bool>,
     ) -> Self {
+        let runtime_config = RuntimeConfigSnapshot::from_config(&config);
         Self {
             inner: Arc::new(AgentStateInner {
                 config,
@@ -78,6 +103,7 @@ impl AgentState {
                 store,
                 started_at,
                 timezone,
+                runtime_config: RwLock::new(runtime_config),
                 runtime: Mutex::new(RuntimeState::default()),
                 monitors: Mutex::new(MonitorTelemetry::default()),
                 shutdown_requested: AtomicBool::new(false),
@@ -108,6 +134,14 @@ impl AgentState {
 
     pub async fn runtime(&self) -> tokio::sync::MutexGuard<'_, RuntimeState> {
         self.inner.runtime.lock().await
+    }
+
+    pub async fn runtime_config_snapshot(&self) -> RuntimeConfigSnapshot {
+        self.inner.runtime_config.read().await.clone()
+    }
+
+    pub async fn replace_runtime_config(&self, next: &AppConfig) {
+        *self.inner.runtime_config.write().await = RuntimeConfigSnapshot::from_config(next);
     }
 
     pub async fn monitor_snapshot(&self) -> MonitorTelemetry {
