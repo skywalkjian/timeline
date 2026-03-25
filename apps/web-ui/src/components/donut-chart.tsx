@@ -1,14 +1,20 @@
 /* Donut chart rendered with ECharts so tooltip, legend, and selection share one engine. */
 
 import { useMemo } from 'react'
-import ReactECharts from 'echarts-for-react'
-import * as echarts from 'echarts'
+import ReactEChartsCore from 'echarts-for-react/lib/core'
+import * as echarts from 'echarts/core'
+import { PieChart } from 'echarts/charts'
+import { GraphicComponent, TooltipComponent } from 'echarts/components'
+import { SVGRenderer } from 'echarts/renderers'
+import type { EChartsOption } from 'echarts'
 import {
   formatDuration,
   isFilterActive,
   type DashboardFilter,
   type DonutSlice,
 } from '../lib/chart-model'
+
+echarts.use([PieChart, TooltipComponent, GraphicComponent, SVGRenderer])
 
 const LABEL_COLOR = '#1d2c43'
 const MUTED_COLOR = '#6f839f'
@@ -30,7 +36,7 @@ export function DonutChart(props: {
     [props.slices],
   )
 
-  const option = useMemo<echarts.EChartsOption>(() => {
+  const option = useMemo<EChartsOption>(() => {
     return {
       animation: false,
       tooltip: {
@@ -139,7 +145,8 @@ export function DonutChart(props: {
 
   return (
     <div className="donut-card">
-      <ReactECharts
+      <ReactEChartsCore
+        echarts={echarts}
         option={option}
         notMerge
         lazyUpdate
@@ -212,7 +219,7 @@ export function CompactDonutChart(props: {
     return displaySlices[0]
   }, [displaySlices, props.selectedKey])
 
-  const option = useMemo<echarts.EChartsOption>(() => {
+  const option = useMemo<EChartsOption>(() => {
     return {
       animation: false,
       tooltip: {
@@ -341,7 +348,8 @@ export function CompactDonutChart(props: {
   }
 
   return (
-    <ReactECharts
+    <ReactEChartsCore
+      echarts={echarts}
       option={option}
       notMerge
       lazyUpdate
