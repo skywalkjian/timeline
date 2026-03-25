@@ -334,79 +334,82 @@ export function TimelineChart(props: {
             <span>{formatDuration(visibleDuration)}</span>
           </div>
 
-          <div
-            ref={overviewRef}
-            className="timeline-overview"
-            onPointerDown={(event) => {
-              if (!props.onViewportChange) {
-                return
-              }
-
-              const rect = overviewRef.current?.getBoundingClientRect()
-              if (!rect) {
-                return
-              }
-
-              const ratio = clampNumber((event.clientX - rect.left) / rect.width, 0, 1)
-              const centerSec = ratio * DAY_SECONDS
-              const next = clampWindow(
-                centerSec - visibleDuration / 2,
-                centerSec + visibleDuration / 2,
-                visibleDuration,
-              )
-              props.onViewportChange(next.startSec, next.endSec)
-            }}
-          >
-            <div className="timeline-overview-grid" />
-
-            {overviewSegments.map((segment) => (
-              <span
-                key={segment.id}
-                className="timeline-overview-segment"
-                style={{
-                  left: `${segment.leftPct}%`,
-                  width: `${segment.widthPct}%`,
-                  top: `${segment.topPct}%`,
-                  height: `${segment.heightPct}%`,
-                  backgroundColor: segment.color,
-                  opacity: segment.opacity,
-                }}
-              />
-            ))}
-
+          <div className="timeline-overview-row">
+            <div className="timeline-overview-label">全天</div>
             <div
-              className="timeline-overview-window"
-              style={{
-                left: `${(props.viewStartSec / DAY_SECONDS) * 100}%`,
-                width: `${Math.max((visibleDuration / DAY_SECONDS) * 100, 1.6)}%`,
+              ref={overviewRef}
+              className="timeline-overview"
+              onPointerDown={(event) => {
+                if (!props.onViewportChange) {
+                  return
+                }
+
+                const rect = overviewRef.current?.getBoundingClientRect()
+                if (!rect) {
+                  return
+                }
+
+                const ratio = clampNumber((event.clientX - rect.left) / rect.width, 0, 1)
+                const centerSec = ratio * DAY_SECONDS
+                const next = clampWindow(
+                  centerSec - visibleDuration / 2,
+                  centerSec + visibleDuration / 2,
+                  visibleDuration,
+                )
+                props.onViewportChange(next.startSec, next.endSec)
               }}
-              onPointerDown={(event) => beginOverviewDrag(event, 'move', props, dragStateRef)}
             >
-              <button
-                type="button"
-                className="timeline-overview-handle is-start"
-                aria-label="调整时间窗口开始位置"
-                onPointerDown={(event) =>
-                  beginOverviewDrag(event, 'resize-start', props, dragStateRef)
-                }
+              <div className="timeline-overview-grid" />
+
+              {overviewSegments.map((segment) => (
+                <span
+                  key={segment.id}
+                  className="timeline-overview-segment"
+                  style={{
+                    left: `${segment.leftPct}%`,
+                    width: `${segment.widthPct}%`,
+                    top: `${segment.topPct}%`,
+                    height: `${segment.heightPct}%`,
+                    backgroundColor: segment.color,
+                    opacity: segment.opacity,
+                  }}
+                />
+              ))}
+
+              <div
+                className="timeline-overview-window"
+                style={{
+                  left: `${(props.viewStartSec / DAY_SECONDS) * 100}%`,
+                  width: `${Math.max((visibleDuration / DAY_SECONDS) * 100, 0.12)}%`,
+                }}
+                onPointerDown={(event) => beginOverviewDrag(event, 'move', props, dragStateRef)}
               >
-                <span className="timeline-overview-handle-time">
-                  {formatClock(props.viewStartSec)}
-                </span>
-              </button>
-              <div className="timeline-overview-window-body" aria-hidden="true" />
-              <button
-                type="button"
-                className="timeline-overview-handle is-end"
-                aria-label="调整时间窗口结束位置"
-                onPointerDown={(event) =>
-                  beginOverviewDrag(event, 'resize-end', props, dragStateRef)
-                }
-              >
-                <span className="timeline-overview-handle-time">
-                  {formatClock(props.viewEndSec)}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  className="timeline-overview-handle is-start"
+                  aria-label="调整时间窗口开始位置"
+                  onPointerDown={(event) =>
+                    beginOverviewDrag(event, 'resize-start', props, dragStateRef)
+                  }
+                >
+                  <span className="timeline-overview-handle-time">
+                    {formatClock(props.viewStartSec)}
+                  </span>
+                </button>
+                <div className="timeline-overview-window-body" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="timeline-overview-handle is-end"
+                  aria-label="调整时间窗口结束位置"
+                  onPointerDown={(event) =>
+                    beginOverviewDrag(event, 'resize-end', props, dragStateRef)
+                  }
+                >
+                  <span className="timeline-overview-handle-time">
+                    {formatClock(props.viewEndSec)}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

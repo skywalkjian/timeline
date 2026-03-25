@@ -816,6 +816,38 @@ function TimelinePage(props: {
     [props.appFilter, props.dashboard.focusSegments, props.dashboard.presenceSegments],
   )
   const zoomPresets = [0.25, 0.5, 1, 4]
+  const panStepHours = props.zoomHours <= 0.25 ? 1 / 12 : Math.max(1 / 12, props.zoomHours / 2)
+  const windowDurationSec = props.viewEndSec - props.viewStartSec
+  const visibleAppCount = useMemo(
+    () => new Set(visibleFocusItems.map((item) => item.key)).size,
+    [visibleFocusItems],
+  )
+  const focusDurationSec = useMemo(
+    () => sumOverlappedDuration(props.dashboard.focusSegments, props.viewStartSec, props.viewEndSec),
+    [props.dashboard.focusSegments, props.viewEndSec, props.viewStartSec],
+  )
+  const activeDurationSec = useMemo(
+    () =>
+      sumOverlappedDuration(
+        props.dashboard.presenceSegments.filter((segment) => segment.key === 'active'),
+        props.viewStartSec,
+        props.viewEndSec,
+      ),
+    [props.dashboard.presenceSegments, props.viewEndSec, props.viewStartSec],
+  )
+  const longestVisibleDurationSec = useMemo(
+    () =>
+      visibleFocusItems.reduce(
+        (maxDuration, segment) =>
+          Math.max(maxDuration, overlapDuration(segment, props.viewStartSec, props.viewEndSec)),
+        0,
+      ),
+    [props.viewEndSec, props.viewStartSec, visibleFocusItems],
+  )
+  const focusCoverageRatio =
+    windowDurationSec > 0 ? clampNumber(focusDurationSec / windowDurationSec, 0, 1) : 0
+  const activeRatio =
+    windowDurationSec > 0 ? clampNumber(activeDurationSec / windowDurationSec, 0, 1) : 0
   const windowLabel = `${formatHourLabel(props.viewStartHour)} - ${formatHourLabel(
     props.viewStartHour + props.zoomHours,
   )}`
@@ -823,6 +855,10 @@ function TimelinePage(props: {
   function applyWindow(nextZoomHours: number, nextStartHour: number) {
     props.setZoomHours(nextZoomHours)
     props.setViewStartHour(clampViewStart(normalizeZoomHours(nextStartHour), nextZoomHours))
+  }
+
+  function shiftWindow(direction: -1 | 1) {
+    applyWindow(props.zoomHours, props.viewStartHour + direction * panStepHours)
   }
 
   return (
@@ -861,10 +897,11 @@ function TimelinePage(props: {
 
               <div className="timeline-control-group">
                 <span className="timeline-control-label">窗口</span>
+                <span className="timeline-control-hint">步长 {formatZoomPreset(panStepHours)}</span>
                 <button
                   type="button"
                   className="timeline-control-button"
-                  onClick={() => applyWindow(props.zoomHours, props.viewStartHour - props.zoomHours / 2)}
+                  onClick={() => shiftWindow(-1)}
                 >
                   向前
                 </button>
@@ -878,11 +915,34 @@ function TimelinePage(props: {
                 <button
                   type="button"
                   className="timeline-control-button"
-                  onClick={() => applyWindow(props.zoomHours, props.viewStartHour + props.zoomHours / 2)}
+                  onClick={() => shiftWindow(1)}
                 >
                   向后
                 </button>
               </div>
+            </div>
+
+            <div className="timeline-snapshot-grid" role="list" aria-label="窗口摘要">
+              <article className="timeline-snapshot-card" role="listitem">
+                <span>窗口时长</span>
+                <strong>{formatDuration(windowDurationSec)}</strong>
+                <small>{windowLabel}</small>
+              </article>
+              <article className="timeline-snapshot-card" role="listitem">
+                <span>窗口覆盖</span>
+                <strong>{formatPercent(focusCoverageRatio)}</strong>
+                <small>应用记录 {formatDuration(focusDurationSec)}</small>
+              </article>
+              <article className="timeline-snapshot-card" role="listitem">
+                <span>活跃占比</span>
+                <strong>{formatPercent(activeRatio)}</strong>
+                <small>状态活跃 {formatDuration(activeDurationSec)}</small>
+              </article>
+              <article className="timeline-snapshot-card" role="listitem">
+                <span>应用与连续</span>
+                <strong>{visibleAppCount} / {formatDuration(longestVisibleDurationSec)}</strong>
+                <small>窗口内应用数 / 最长片段</small>
+              </article>
             </div>
 
             <TimelineChart
@@ -1196,8 +1256,10 @@ function defaultTimelineViewport(
 }
 
 function formatHourLabel(hours: number) {
-  const whole = Math.floor(hours)
-  const minutes = Math.round((hours - whole) * 60)
+  const totalMinutes = Math.round(hours * 60)
+  const normalizedMinutes = Math.max(0, totalMinutes)
+  const whole = Math.floor(normalizedMinutes / 60)
+  const minutes = normalizedMinutes % 60
   return `${`${whole}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`
 }
 
@@ -1251,6 +1313,25 @@ function buildWeekSeries(days: DaySummary[], selectedDate: string): WeekBarDatum
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`
+}
+
+function overlapDuration(segment: ChartSegment, viewStartSec: number, viewEndSec: number) {
+  return Math.max(0, Math.min(segment.endSec, viewEndSec) - Math.max(segment.startSec, viewStartSec))
+}
+
+function sumOverlappedDuration(
+  segments: ChartSegment[],
+  viewStartSec: number,
+  viewEndSec: number,
+) {
+  return segments.reduce(
+    (total, segment) => total + overlapDuration(segment, viewStartSec, viewEndSec),
+    0,
+  )
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max))
 }
 
 function niceWeeklyAxisMax(seconds: number) {
